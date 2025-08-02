@@ -20,17 +20,22 @@ import xxhash
 import yaml
 from dotenv import load_dotenv
 from tqdm import tqdm
+from PIL import Image
+from io import BytesIO
 
-from llama_index.core import Settings, Document
+from llama_index.core import Settings, Document 
+from llama_index.core.schema import ImageDocument
 from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core import StorageContext
 from llama_index.core import PropertyGraphIndex
+from llama_index.core.indices import MultiModalVectorStoreIndex
 from llama_index.core.llms import ChatMessage
 from rag_factory.llms import OpenAICompatible
 from rag_factory.embeddings import OpenAICompatibleEmbedding
 from rag_factory.caches import init_db
 
 from rag_factory.documents import kg_triples_parse_fn
-from rag_factory.prompts import KG_TRIPLET_EXTRACT_TMPL
+from rag_factory.prompts import KG_TRIPLET_EXTRACT_TMPL, MULTIMODAL_QA_TMPL
 
 from rag_factory.graph_constructor import GraphRAGConstructor
 from rag_factory.retrivers.graphrag_query_engine import GraphRAGQueryEngine
@@ -58,13 +63,24 @@ def initialize_components(
     embedding_config: EmbeddingConfig,
     storage_config: StorageConfig,
     rag_config: RAGConfig
-):
+):  
+    r"""Initialize the components required for RAG."""
+
     # 初始化LLM
-    llm = OpenAICompatible(
-        api_base=llm_config.base_url,
-        api_key=llm_config.api_key,
-        model=llm_config.model
-    )
+    if rag_config.solution == "mm_rag":
+        from rag_factory.multi_modal_llms import OpenAICompatibleMultiModal
+        llm = OpenAICompatibleMultiModal(
+                api_base=llm_config.base_url,
+                api_key=llm_config.api_key,
+                model=llm_config.model,
+            )
+    else:
+        llm = OpenAICompatible(
+            api_base=llm_config.base_url,
+            api_key=llm_config.api_key,
+            model=llm_config.model
+        )
+
     Settings.llm = llm
     
     # 初始化Embedding模型
@@ -74,6 +90,8 @@ def initialize_components(
         model_name=embedding_config.model
     )
     Settings.embed_model = embedding
+
+    text_store, graph_store, image_store = None, None, None
     
     if storage_config.type == "vector_store":
         # 初始化向量存储
@@ -82,19 +100,54 @@ def initialize_components(
         client = qdrant_client.QdrantClient(
             url=storage_config.url,
         )
-        store = QdrantVectorStore(client=client, collection_name=dataset_config.dataset_name)
+        text_store = QdrantVectorStore(client=client, collection_name=dataset_config.dataset_name)
     elif storage_config.type == "graph_store":
         from rag_factory.storages.graph_storages import GraphRAGStore
         # 初始化图存储
-        store = GraphRAGStore(
+        graph_store = GraphRAGStore(
             llm=llm,
             max_cluster_size=rag_config.max_cluster_size,
             url=storage_config.url,
             username=storage_config.username,
             password=storage_config.password,
         )
+    elif storage_config.type == "mm_store":
+        # import qdrant_client
+        # from rag_factory.storages.vector_storages import QdrantVectorStore
+        # client = qdrant_client.QdrantClient(
+        #     url=storage_config.url,
+        # )
+        # text_store = QdrantVectorStore(client=client, collection_name=dataset_config.dataset_name+"_text_collection")
+        # image_store = QdrantVectorStore(client=client, collection_name=dataset_config.dataset_name+"_image_collection")
+        from rag_factory.storages.multimodal_storages import Neo4jVectorStore
+        text_store = Neo4jVectorStore(
+            url=storage_config.url,
+            username=storage_config.username,
+            password=storage_config.password,
+            index_name=f"{dataset_config.dataset_name}_text_collection",
+            node_label="Chunk",
+            embedding_dimension=embedding_config.dimension
+        )
+        image_store = Neo4jVectorStore(
+            url=storage_config.url,
+            username=storage_config.username,
+            password=storage_config.password,
+            index_name=f"{dataset_config.dataset_name}_image_collection",
+            node_label="Image",
+            embedding_dimension=512
+
+        )
+
+    else:
+        raise ValueError(f"Unsupported storage type: {storage_config.type}")
     
-    return llm, embedding, store
+    stores = {
+        "text_store": text_store,
+        "graph_store": graph_store,
+        "image_store": image_store,
+    }
+
+    return llm, embedding, stores
 
 def load_dataset(dataset_name: str, subset: int = 0) -> Any:
     """加载数据集"""
@@ -112,6 +165,26 @@ def get_corpus(dataset: Any, dataset_name: str) -> Dict[int, Tuple[str, str]]:
             passages[hash_t] = (title, text)
     return passages
 
+def get_images(dataset: Any, dataset_name: str) -> Dict[int, Tuple[str, str]]:
+    """获取图片库"""
+    all_images = []
+
+    images_matadata_path = Path(f"./data/{dataset_name}/images_metadata.json")
+    images_path = Path(f"./data/{dataset_name}/images")
+    # load metadata from json file
+
+    with open(images_matadata_path, "r") as f:
+        images_matadata = json.load(f)
+
+    for image in images_matadata:
+        image_path = images_path / Path(image["file_name"]+".png")
+        if image_path.exists():
+            # img_content = Image.open(BytesIO(image_path.read_bytes()))
+            # all_images.append(img_content)
+            all_images.append({"text": image["caption"], "path": image_path})
+    return all_images
+
+
 def get_queries(dataset: Any) -> List[Query]:
     """获取查询"""
     return [
@@ -123,20 +196,29 @@ def get_queries(dataset: Any) -> List[Query]:
         for datapoint in dataset
     ]
 
+
 def _query_task(retriever, query_engine, query: Query, solution="naive_rag") -> Dict[str, Any]:
         question = query.question
         retrived_docs = [node.text for node in retriever.retrieve(question)]
         query_engine_response = query_engine.query(question)
         # retrived_docs = [node.text for node in query_engine_response.source_nodes]
+        # display_query_and_multimodal_response(question, query_engine_response)
+        if solution == "mm_rag":
+            image_nodes = query_engine_response.metadata["image_nodes"] or []
+            # text_nodes = query_engine_response.metadata["text_nodes"] or []
+            # retrived_docs.extend([node.text for node in text_nodes])
+            retrived_images = [scored_img_node.node.image_path for scored_img_node in image_nodes]
+            retrived_docs.extend(retrived_images)
+
         answer = query_engine_response.response
 
 
         return {
             "question": query.question,
-            "answer": answer,
+            "answer": answer.lower(),
             "evidence": retrived_docs,
             "ground_truth": [e[0] for e in query.evidence],
-            "ground_truth_answer": query.answer,
+            "ground_truth_answer": query.answer.lower(),
         }
 
 if __name__ == "__main__":
@@ -149,13 +231,16 @@ if __name__ == "__main__":
     dataset_config, llm_config, embedding_config, storage_config, rag_config = read_args(args.config)
     print("Loading config file:", args.config)
     # 加载基础组件
-    llm, embedding, store = initialize_components(
+    llm, embedding, stores = initialize_components(
         dataset_config,
         llm_config,
         embedding_config,
         storage_config,
         rag_config
     )
+
+    # 从.env文件中加载环境变量
+    load_dotenv()
 
 
     print("Loading dataset...")
@@ -179,6 +264,15 @@ if __name__ == "__main__":
     )
     nodes = splitter.get_nodes_from_documents(documents)
 
+    if rag_config.solution == "mm_rag":
+        # 获取图片数据
+        all_images = get_images(dataset, dataset_name)
+
+        # 将图片转换为ImageDocument对象
+        image_documents = [ImageDocument(text=img["text"], image_path=img["path"]) for img in all_images]
+        # 添加图片节点到nodes
+        nodes.extend(image_documents)
+
     args.create = "create" in rag_config.stages
     args.inference = "inference" in rag_config.stages
     args.evaluation = "evaluation" in rag_config.stages
@@ -186,15 +280,15 @@ if __name__ == "__main__":
     if args.create:
         print("Create Index...")
         if rag_config.solution == "naive_rag":
-            from llama_index.core import StorageContext
             from llama_index.core import VectorStoreIndex
 
-            storage_context = StorageContext.from_defaults(vector_store=store)
+            text_store = stores["text_store"]
+            storage_context = StorageContext.from_defaults(vector_store=text_store)
             # if collection exists, no need to create index again
-            if store._collection_exists(collection_name=dataset_name):
+            if text_store._collection_exists(collection_name=dataset_name):
                 print(f"Collection {dataset_name} already exists, skipping index creation.")
                 index = VectorStoreIndex.from_vector_store(
-                    store,
+                    text_store,
                     storage_context=storage_context,
                     embed_model=Settings.embed_model
                 )
@@ -216,29 +310,54 @@ if __name__ == "__main__":
             )
 
             # 构建索引
+            graph_store = stores["graph_store"]
             index = PropertyGraphIndex(
                 nodes=nodes,
                 kg_extractors=[kg_extractor],
-                property_graph_store=store,
+                property_graph_store=graph_store,
                 show_progress=True
             )
             
             # 构建社区
             index.property_graph_store.build_communities()
             print("Knowledge graph construction completed.")
+        elif rag_config.solution == "mm_rag":
+            text_store, image_store = stores["text_store"], stores["image_store"]
+            storage_context = StorageContext.from_defaults(
+                vector_store=text_store, image_store=image_store
+            )
+
+            # if collection exists, no need to create index again
+            if text_store.retrieve_existing_index() and image_store.retrieve_existing_index():
+                print(f"Collection {dataset_name} already exists, skipping index creation.")
+                index = MultiModalVectorStoreIndex.from_vector_store(
+                    vector_store=text_store,
+                    image_vector_store=image_store
+                )
+            else:
+                print(f"Creating collection {dataset_name}...")
+
+                # Create the MultiModal index
+                index = MultiModalVectorStoreIndex.from_documents(
+                    nodes,
+                    image_embed_model="clip:ViT-B/32",
+                    storage_context=storage_context,
+                    show_progress=True,
+                    # is_image_to_text=True # when ImageNodess that have populated text fields, we can choose to use this text to build embeddings on that will be used for retrieval 
+                )
 
     if args.inference:
         print("Running benchmark...")
         if index is None:
             if rag_config.solution == "naive_rag":
                 index = VectorStoreIndex.from_vector_store(
-                    store,
+                    text_store,
                     # Embedding model should match the original embedding model
                     # embed_model=Settings.embed_model
                 )
             elif rag_config.solution == "graph_rag":
                 index = PropertyGraphIndex.from_existing(
-                    property_graph_store=store,
+                    property_graph_store=graph_store,
                     embed_kg_nodes=True
                 )
                 # 加载社区信息
@@ -247,20 +366,40 @@ if __name__ == "__main__":
                     index.property_graph_store.load_entity_info()
                     index.property_graph_store.load_community_info()
                     index.property_graph_store.load_community_summaries()
+
+            elif rag_config.solution == "mm_rag":
+                index = MultiModalVectorStoreIndex.from_vector_store(
+                    vector_store=text_store,
+                    image_vector_store=image_store
+                )
+            
+            else:   
+                raise ValueError(f"Unsupported RAG solution: {rag_config.solution}")
         
         queries = get_queries(dataset)
         results = []
 
         # retriver
-        retriever = index.as_retriever(
-            similarity_top_k=rag_config.similarity_top_k,
-        )
+        if rag_config.solution == "mm_rag":
+            retriever = index.as_retriever(
+                similarity_top_k=rag_config.similarity_top_k,
+                image_similarity_top_k=rag_config.similarity_top_k,
+            )
+        else:
+            # text retriever
+            retriever = index.as_retriever(
+                similarity_top_k=rag_config.similarity_top_k,
+            )
         # query engine
         if rag_config.solution == "naive_rag":
-            query_engine = index.as_query_engine()
+            query_engine = index.as_query_engine(
+                similarity_top_k=rag_config.similarity_top_k,
+            )
         elif rag_config.solution == "graph_rag":
             if rag_config.mode == "local":
-                query_engine = index.as_query_engine()
+                query_engine = index.as_query_engine(
+                    similarity_top_k=rag_config.similarity_top_k,
+                )
             elif rag_config.mode == "global":
                 query_engine = GraphRAGQueryEngine(
                     graph_store=index.property_graph_store,
@@ -268,9 +407,14 @@ if __name__ == "__main__":
                     index=index,
                     similarity_top_k = rag_config.similarity_top_k,
                 )
-        elif rag_config.solution == "multi_modal_rag":
-            # TODO: Implement Multi-modal RAG solution
-            raise NotImplementedError("Multi-modal RAG solution is not implemented yet.")
+        elif rag_config.solution == "mm_rag":
+            query_engine = index.as_query_engine(
+                text_qa_template=MULTIMODAL_QA_TMPL,
+                # similarity_top_k=rag_config.similarity_top_k, # TODO: check limit_mm_per_prompt='{"image":3}' in VLM inference service
+                # image_similarity_top_k=rag_config.similarity_top_k,
+                # limit_mm_per_prompt=rag_config.similarity_top_k,
+            )
+        
         else:
             raise ValueError(f"Unsupported RAG solution: {rag_config.solution}")
 
