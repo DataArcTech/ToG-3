@@ -46,10 +46,15 @@ pip install -e .
 ```
 
 ## Usage
+```bash
+bash run.sh naive_rag/graph_rag/mm_rag
+```
+or
 
 ```bash
 python main.py --config examples/graphrag/config.yaml
 ```
+
 
 ## Examples
 
@@ -59,11 +64,11 @@ See the `examples/` directory for sample configurations and usage.
 
 ### ✅ Implemented Features
 - Vector RAG (基于Qdrant实现)
-- Graph RAG (支持知识图检索)
+- Graph RAG (基于Neo4j实现)
+- Multi-modal RAG (基于Neo4j实现文本和图像向量存储与检索)
 - Lightweight SQLite Cache (轻量级缓存方案)
 
 ### 🚧 Planned Features
-- Multi-modal RAG (多模态检索增强生成)
 - ReAct QueryEngine (交互式查询引擎)
 - Query Engineering:
   - Query Rewriting (查询重写)

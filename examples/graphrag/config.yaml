@@ -6,13 +6,13 @@ dataset:
  chunk_overlap: 20 # 每个chunk之间的重叠token数
 
 llm:
-  type: OpenAILike
+  type: OpenAICompatible
   base_url: "http://192.168.190.10:9997/v1"
   api_key: "not used actually"
   model: "qwen2.5-instruct"
 
 embedding:
-  type: OpenAILikeEmbedding
+  type: OpenAICompatibleEmbedding
   base_url: "http://192.168.190.3:9997/v1"
   api_key: "not used actually"
   model: "jina-embeddings-v3"

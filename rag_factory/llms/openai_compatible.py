@@ -21,6 +21,11 @@ from llama_index.llms.openai.base import OpenAI, Tokenizer
 from transformers import AutoTokenizer
 
 
+from llama_index.core.response.notebook_utils import (
+    display_query_and_multimodal_response,
+)
+
+
 class OpenAICompatible(OpenAI):
     """
     OpenaAILike LLM.

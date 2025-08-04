@@ -215,3 +215,6 @@ results/
 # .env files
 .env
 .env.local
+
+# development files
+**dev**
