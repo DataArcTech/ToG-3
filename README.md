@@ -28,7 +28,7 @@ A factory for building advanced RAG (Retrieval-Augmented Generation) pipelines, 
 - GraphRAG architectures 
 - Multi-modal RAG systems
 
-## Features
+## 🌟Features
 
 <div>
   <img src="./assets/knowledge_base_screenshot.png" alt="Example Knowledge Base Screenshot of RAG-Factory" width="800">
@@ -46,10 +46,15 @@ pip install -e .
 ```
 
 ## Usage
+```bash
+bash run.sh naive_rag/graph_rag/mm_rag
+```
+or
 
 ```bash
 python main.py --config examples/graphrag/config.yaml
 ```
+
 
 ## Examples
 
@@ -59,16 +64,24 @@ See the `examples/` directory for sample configurations and usage.
 
 ### ✅ Implemented Features
 - Vector RAG (基于Qdrant实现)
-- Graph RAG (支持知识图检索)
+- Graph RAG (基于Neo4j实现)
+- Multi-modal RAG (基于Neo4j实现文本和图像向量存储与检索)
 - Lightweight SQLite Cache (轻量级缓存方案)
 
 ### 🚧 Planned Features
-- Multi-modal RAG (多模态检索增强生成)
 - ReAct QueryEngine (交互式查询引擎)
 - Query Engineering:
   - Query Rewriting (查询重写)
   - Sub-Questions (子问题分解)
 - Agentic RAG (智能工具选择优化性能)
+
+## 🙏 Acknowledgements
+This project draws inspiration from and gratefully acknowledges the contributions of the following open-source project:
+- [llama-index](https://github.com/run-llama/llama_index)
+- [llama-factory](https://github.com/hiyouga/LLaMA-Factory)
+- [Qdrant](https://github.com/qdrant/qdrant)
+- [Neo4j](https://github.com/neo4j/neo4j)
+
 
 ## ⭐ Star History
 

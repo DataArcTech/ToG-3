@@ -1,0 +1,102 @@
+[
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*yscMghSQVAQvQeHV6pZ4PQ.png",
+        "caption": "Knowledge graph schema representing microservice architecture and their tasks. Image by\u00a0author.",
+        "file_name": "1*yscMghSQVAQvQeHV6pZ4PQ"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*LM6CuPZiogendK21_UHwPA.png",
+        "caption": "Node properties of a Microservice and Task nodes. Image by\u00a0author.",
+        "file_name": "1*LM6CuPZiogendK21 UHwPA"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*6pALyl4xZ2_G9LnGlMR18g.png",
+        "caption": "Combining multiple data sources into a knowledge graph. Image by\u00a0author.",
+        "file_name": "1*6pALyl4xZ2 G9LnGlMR18g"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*k9jUdnEB8sR5g0fZzqSiNA.png",
+        "caption": "Subset of the DevOps graph. Image by\u00a0author.",
+        "file_name": "1*k9jUdnEB8sR5g0fZzqSiNA"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*H7FLmJdZvGarmGGs81SIRA.png",
+        "caption": "Vector similarity search in a RAG application. Image by\u00a0author.",
+        "file_name": "1*H7FLmJdZvGarmGGs81SIRA"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*VVWecqvibBb2vVXuyKU5rw.png",
+        "caption": "1*VVWecqvibBb2vVXuyKU5rw",
+        "file_name": "1*VVWecqvibBb2vVXuyKU5rw"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*GFJ9_TnLk2oDnVGtXAwARw.png",
+        "caption": "1*GFJ9 TnLk2oDnVGtXAwARw",
+        "file_name": "1*GFJ9 TnLk2oDnVGtXAwARw"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*Jp-QxrEj_IYlOga84KTyBw.png",
+        "caption": "1*Jp-QxrEj IYlOga84KTyBw",
+        "file_name": "1*Jp-QxrEj IYlOga84KTyBw"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*chHcyzoxurmTuzVsYgrdLA.png",
+        "caption": "1*chHcyzoxurmTuzVsYgrdLA",
+        "file_name": "1*chHcyzoxurmTuzVsYgrdLA"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*OB43zXlHa4fcnL3n44JxcQ.png",
+        "caption": "1*OB43zXlHa4fcnL3n44JxcQ",
+        "file_name": "1*OB43zXlHa4fcnL3n44JxcQ"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*DbWfNKMRWJcomb9N5QIhOQ.png",
+        "caption": "1*DbWfNKMRWJcomb9N5QIhOQ",
+        "file_name": "1*DbWfNKMRWJcomb9N5QIhOQ"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*RYCIqV1Gfp18VkXfY411Xg.jpeg",
+        "caption": "The goal of information extraction pipeline is to extract structured information from unstructured text. Image by the\u00a0author.",
+        "file_name": "1*RYCIqV1Gfp18VkXfY411Xg"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*93ZK9-74dYv4eXY-Oe_bkA.png",
+        "caption": "Multiple steps of information extraction pipeline. Image by\u00a0author.",
+        "file_name": "1*93ZK9-74dYv4eXY-Oe bkA"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*OCjG5oY6DyOnLuo1_N4OlA.png",
+        "caption": "Multiple nodes representing the same\u00a0entity.",
+        "file_name": "1*OCjG5oY6DyOnLuo1 N4OlA"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*mEipkYmePMYvX4t5tU8u2w.png",
+        "caption": "Multiple nodes representing the same\u00a0entity.",
+        "file_name": "1*mEipkYmePMYvX4t5tU8u2w"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*PHsfndcMjOMoAdUAx8IJrw.png",
+        "caption": "Multiple nodes representing the same\u00a0entity.",
+        "file_name": "1*PHsfndcMjOMoAdUAx8IJrw"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*CTF2gfNwx4v7V-0qM4s6uw.png",
+        "caption": "1*CTF2gfNwx4v7V-0qM4s6uw",
+        "file_name": "1*CTF2gfNwx4v7V-0qM4s6uw"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*2wrx2joD1PaAsC27pshn3A.png",
+        "caption": "Agenda for this blog post. Image by\u00a0author",
+        "file_name": "1*2wrx2joD1PaAsC27pshn3A"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*b8pT6KIERk3ZPd-729TmXA.png",
+        "caption": "1*b8pT6KIERk3ZPd-729TmXA",
+        "file_name": "1*b8pT6KIERk3ZPd-729TmXA"
+    },
+    {
+        "image_url": "https://cdn-images-1.medium.com/max/800/1*oY5JoNIikQZj3RsXyMrb3w.png",
+        "caption": "1*oY5JoNIikQZj3RsXyMrb3w",
+        "file_name": "1*oY5JoNIikQZj3RsXyMrb3w"
+    }
+]

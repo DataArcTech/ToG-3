@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>RAG-Factory 文档</title>
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
-  <meta name="description" content="RAG-Factory 文档中心">
+  <meta name="description" content="RAG-Factory 文档中心 - 支持标准RAG、图RAG和多模态RAG">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
 
   <!-- 主题切换 -->
@@ -26,12 +26,14 @@
     window.$docsify = {
       name: 'RAG-Factory',
       repo: 'DataArcTech/rag-factory',
+      coverpage: true,
       
       // 侧边栏配置
       loadSidebar: true,
-      subMaxLevel: 2,
+      subMaxLevel: 3,
       alias: {
-        '/.*/_sidebar.md': '/_sidebar.md'
+        '/.*/_sidebar.md': '/_sidebar.md',
+        '/.*/_navbar.md': '/_navbar.md'
       },
 
       // 自动功能
@@ -74,6 +76,7 @@
   <!-- 代码高亮 -->
   <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
   <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
 
   <!-- 主题切换 -->
   <script src="//cdn.jsdelivr.net/npm/docsify-themeable@0/dist/js/docsify-themeable.min.js"></script>
