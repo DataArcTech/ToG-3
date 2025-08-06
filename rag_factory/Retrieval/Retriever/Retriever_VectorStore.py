@@ -10,8 +10,8 @@ from collections import Counter
 import logging
 
 from pydantic import ConfigDict, Field, model_validator
-from Retrieval.RetrieverBase import BaseRetriever, Document
-from Store.VectorStore.VectorStoreBase import VectorStore
+from ..RetrieverBase import BaseRetriever, Document
+from ...Store.VectorStore.VectorStoreBase import VectorStore
 
 logger = logging.getLogger(__name__)
 
