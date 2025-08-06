@@ -1,7 +1,7 @@
 # VectorStore/registry.py
 from typing import Dict, Type, Any, Optional
 from .VectorStoreBase import VectorStore
-from Embed.Embedding_Base import Embeddings
+from ...Embed.Embedding_Base import Embeddings
 from .VectorStore_Faiss import FaissVectorStore
 
 

@@ -6,10 +6,11 @@ import uuid
 import numpy as np
 from typing import Any, Optional, Callable
 from .VectorStoreBase import VectorStore, Document
-from Embed import Embeddings
+from ...Embed.Embedding_Base import Embeddings
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+# TODO 需要支持GPU,提高速度
 
 def _mmr_select(
     docs_and_scores: list[tuple[Document, float]],
