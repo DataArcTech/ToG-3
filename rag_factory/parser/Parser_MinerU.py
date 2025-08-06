@@ -22,7 +22,7 @@ from mineru.backend.pipeline.pipeline_middle_json_mkcontent import union_make as
 from mineru.backend.pipeline.model_json_to_middle_json import result_to_middle_json as pipeline_result_to_middle_json
 from mineru.backend.vlm.vlm_middle_json_mkcontent import union_make as vlm_union_make
 from mineru.utils.models_download_utils import auto_download_and_get_model_root_path
-
+from equation_detect import better_equation_parse
 
 LOCK_KEY_MINERU = "global_shared_lock_mineru"
 if LOCK_KEY_MINERU not in sys.modules:
@@ -67,7 +67,8 @@ class MinerUPdfParser:
             'f_dump_model_output': True,
             'f_dump_orig_pdf': True,
             'f_dump_content_list': True,
-            'f_make_md_mode': MakeMode.MM_MD
+            'f_make_md_mode': MakeMode.MM_MD，
+            'better_equation': True
         })
         
         # Initialize processing state
@@ -243,6 +244,13 @@ class MinerUPdfParser:
                     f"{pdf_file_name}_content_list.json",
                     json.dumps(content_list, ensure_ascii=False, indent=4)
                 )
+                if opts.get('better_equation', False):
+                    logger.info(f"use dolphin to parse equation")
+                    better_content_list = better_equation_parse(pdf_bytes, content_list, pdf_info)
+                    md_writer.write_string(
+                        f"{pdf_file_name}_better_content_list.json",
+                        json.dumps(better_content_list, ensure_ascii=False, indent=4)
+                    )
 
             # Dump middle JSON
             if opts.get('f_dump_middle_json', False) and additional_data and 'middle_json' in additional_data:
@@ -459,7 +467,8 @@ if __name__ == '__main__':
                 'f_dump_model_output': False,
                 'f_dump_orig_pdf': False,
                 'f_dump_content_list': False,
-                'f_make_md_mode': MakeMode.MM_MD
+                'f_make_md_mode': MakeMode.MM_MD,
+                'better_equation': True
             }
         }
         

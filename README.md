@@ -28,7 +28,7 @@ A factory for building advanced RAG (Retrieval-Augmented Generation) pipelines, 
 - GraphRAG architectures 
 - Multi-modal RAG systems
 
-## Features
+## 🌟Features
 
 <div>
   <img src="./assets/knowledge_base_screenshot.png" alt="Example Knowledge Base Screenshot of RAG-Factory" width="800">
@@ -74,6 +74,14 @@ See the `examples/` directory for sample configurations and usage.
   - Query Rewriting (查询重写)
   - Sub-Questions (子问题分解)
 - Agentic RAG (智能工具选择优化性能)
+
+## 🙏 Acknowledgements
+This project draws inspiration from and gratefully acknowledges the contributions of the following open-source project:
+- [llama-index](https://github.com/run-llama/llama_index)
+- [llama-factory](https://github.com/hiyouga/LLaMA-Factory)
+- [Qdrant](https://github.com/qdrant/qdrant)
+- [Neo4j](https://github.com/neo4j/neo4j)
+
 
 ## ⭐ Star History
 
