@@ -1,549 +1,478 @@
-from __future__ import annotations
-import subprocess
-from pathlib import Path
-from typing import Union, List, Dict, Any, Optional, Tuple
+
+import copy
 import json
+import os
 import logging
-import tempfile
-from .Base import Parser
+import threading
+import sys
+from pathlib import Path
+from io import BytesIO
+from typing import List, Optional, Union, Tuple, Any, Dict
+from timeit import default_timer as timer
+
+from loguru import logger
+
+from mineru.cli.common import convert_pdf_bytes_to_bytes_by_pypdfium2, prepare_env, read_fn
+from mineru.data.data_reader_writer import FileBasedDataWriter
+from mineru.utils.draw_bbox import draw_layout_bbox, draw_span_bbox
+from mineru.utils.enum_class import MakeMode
+from mineru.backend.vlm.vlm_analyze import doc_analyze as vlm_doc_analyze
+from mineru.backend.pipeline.pipeline_analyze import doc_analyze as pipeline_doc_analyze
+from mineru.backend.pipeline.pipeline_middle_json_mkcontent import union_make as pipeline_union_make
+from mineru.backend.pipeline.model_json_to_middle_json import result_to_middle_json as pipeline_result_to_middle_json
+from mineru.backend.vlm.vlm_middle_json_mkcontent import union_make as vlm_union_make
+from mineru.utils.models_download_utils import auto_download_and_get_model_root_path
 
 
-class MineruParser(Parser):
+LOCK_KEY_MINERU = "global_shared_lock_mineru"
+if LOCK_KEY_MINERU not in sys.modules:
+    sys.modules[LOCK_KEY_MINERU] = threading.Lock()
+
+
+class MinerUPdfParser:
     """
-    MinerU 2.0 document parsing utility class
-
-    Supports parsing PDF and image documents, converting the content into structured data
-    and generating markdown and JSON output.
-
-    Note: Office documents are no longer directly supported. Please convert them to PDF first.
+    Features:
+    - Thread-safe processing
+    - Modular design with clear separation of concerns
+    - Comprehensive error handling
+    - Performance monitoring
+    - Flexible configuration options
     """
-
-    __slots__ = ()
-
-    # Class-level logger
-    logger = logging.getLogger(__name__)
-
-    def __init__(self) -> None:
-        """Initialize MineruParser"""
-        super().__init__()
-
-    @staticmethod
-    def _run_mineru_command(
-        input_path: Union[str, Path],
-        output_dir: Union[str, Path],
-        method: str = "auto",
-        lang: Optional[str] = None,
-        backend: str = "pipeline",
-        start_page: Optional[int] = None,
-        end_page: Optional[int] = None,
-        formula: bool = True,
-        table: bool = True,
-        device: Optional[str] = None,
-        source: str = "huggingface",
-        vlm_url: Optional[str] = None,
-    ) -> None:
+    
+    def __init__(self, **kwargs):
         """
-        Run mineru command line tool
-
+        Initialize the MinerU PDF Parser.
+        
         Args:
-            input_path: Path to input file or directory
-            output_dir: Output directory path
-            method: Parsing method (auto, txt, ocr)
-            lang: Document language for OCR optimization
-            backend: Parsing backend
-            start_page: Starting page number (0-based)
-            end_page: Ending page number (0-based)
-            formula: Enable formula parsing
-            table: Enable table parsing
-            device: Inference device
-            source: Model source
-            vlm_url: When the backend is `vlm-sglang-client`, you need to specify the server_url
+            **kwargs: Configuration parameters including:
+                - backend: Processing backend ('pipeline' or 'vlm-*')
+                - parse_method: Parsing method ('auto', 'txt', 'ocr')
+                - formula_enable: Enable formula parsing
+                - table_enable: Enable table parsing
+                - server_url: Server URL for vlm-sglang-client backend
+                - output_options: Dictionary of output format options
         """
-        cmd = [
-            "mineru",
-            "-p",
-            str(input_path),
-            "-o",
-            str(output_dir),
-            "-m",
-            method,
-            "-b",
-            backend,
-            "--source",
-            source,
-        ]
+        self.backend = kwargs.get('backend', 'pipeline')
+        self.parse_method = kwargs.get('parse_method', 'auto')
+        self.formula_enable = kwargs.get('formula_enable', True)
+        self.table_enable = kwargs.get('table_enable', True)
+        self.server_url = kwargs.get('server_url', None)
+        
+        # Output configuration
+        self.output_options = kwargs.get('output_options', {
+            'f_draw_layout_bbox': True,
+            'f_draw_span_bbox': True,
+            'f_dump_md': True,
+            'f_dump_middle_json': True,
+            'f_dump_model_output': True,
+            'f_dump_orig_pdf': True,
+            'f_dump_content_list': True,
+            'f_make_md_mode': MakeMode.MM_MD
+        })
+        
+        # Initialize processing state
+        self.total_pages = 0
+        self.processed_pages = 0
+        self.processing_stats = {}
+        
+        logger.info(f"MinerU PDF Parser initialized with backend: {self.backend}")
 
-        if lang:
-            cmd.extend(["-l", lang])
-        if start_page is not None:
-            cmd.extend(["-s", str(start_page)])
-        if end_page is not None:
-            cmd.extend(["-e", str(end_page)])
-        if not formula:
-            cmd.extend(["-f", "false"])
-        if not table:
-            cmd.extend(["-t", "false"])
-        if device:
-            cmd.extend(["-d", device])
-        if vlm_url:
-            cmd.extend(["-u", vlm_url])
-
-        try:
-            # Prepare subprocess parameters to hide console window on Windows
-            import platform
-
-            subprocess_kwargs = {
-                "capture_output": True,
-                "text": True,
-                "check": True,
-                "encoding": "utf-8",
-                "errors": "ignore",
-            }
-
-            # Hide console window on Windows
-            if platform.system() == "Windows":
-                subprocess_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-
-            result = subprocess.run(cmd, **subprocess_kwargs)
-            logging.info("MinerU command executed successfully")
-            if result.stdout:
-                logging.debug(f"MinerU output: {result.stdout}")
-        except subprocess.CalledProcessError as e:
-            logging.error(f"Error running mineru command: {e}")
-            if e.stderr:
-                logging.error(f"Error details: {e.stderr}")
-            raise
-        except FileNotFoundError:
-            raise RuntimeError(
-                "mineru command not found. Please ensure MinerU 2.0 is properly installed:\n"
-                "pip install -U 'mineru[core]' or uv pip install -U 'mineru[core]'"
-            )
-
-    @staticmethod
-    def _read_output_files(
-        output_dir: Path, file_stem: str, method: str = "auto"
-    ) -> Tuple[List[Dict[str, Any]], str]:
+    def _validate_inputs(self, pdf_files: List[Union[str, Path, bytes]], 
+                        languages: Optional[List[str]] = None) -> Tuple[List[str], List[bytes], List[str]]:
         """
-        Read the output files generated by mineru
-
+        Validate and normalize input parameters.
+        
         Args:
-            output_dir: Output directory
-            file_stem: File name without extension
-
+            pdf_files: List of PDF file paths or bytes
+            languages: List of languages for each PDF
+            
         Returns:
-            Tuple containing (content list JSON, Markdown text)
+            Tuple of (file_names, pdf_bytes_list, language_list)
         """
-        # Look for the generated files
-        md_file = output_dir / f"{file_stem}.md"
-        json_file = output_dir / f"{file_stem}_content_list.json"
-        images_base_dir = output_dir  # Base directory for images
-
-        file_stem_subdir = output_dir / file_stem
-        if file_stem_subdir.exists():
-            md_file = file_stem_subdir / method / f"{file_stem}.md"
-            json_file = file_stem_subdir / method / f"{file_stem}_content_list.json"
-            images_base_dir = file_stem_subdir / method
-
-        # Read markdown content
-        md_content = ""
-        if md_file.exists():
-            try:
-                with open(md_file, "r", encoding="utf-8") as f:
-                    md_content = f.read()
-            except Exception as e:
-                logging.warning(f"Could not read markdown file {md_file}: {e}")
-
-        # Read JSON content list
-        content_list = []
-        if json_file.exists():
-            try:
-                with open(json_file, "r", encoding="utf-8") as f:
-                    content_list = json.load(f)
-
-                # Always fix relative paths in content_list to absolute paths
-                logging.info(
-                    f"Fixing image paths in {json_file} with base directory: {images_base_dir}"
-                )
-                for item in content_list:
-                    if isinstance(item, dict):
-                        for field_name in [
-                            "img_path",
-                            "table_img_path",
-                            "equation_img_path",
-                        ]:
-                            if field_name in item and item[field_name]:
-                                img_path = item[field_name]
-                                absolute_img_path = (
-                                    images_base_dir / img_path
-                                ).resolve()
-                                item[field_name] = str(absolute_img_path)
-                                logging.debug(
-                                    f"Updated {field_name}: {img_path} -> {item[field_name]}"
-                                )
-
-            except Exception as e:
-                logging.warning(f"Could not read JSON file {json_file}: {e}")
-
-        return content_list, md_content
-
-    def parse_pdf(
-        self,
-        pdf_path: Union[str, Path],
-        output_dir: Optional[str] = None,
-        method: str = "auto",
-        lang: Optional[str] = None,
-        **kwargs,
-    ) -> List[Dict[str, Any]]:
-        """
-        Parse PDF document using MinerU 2.0
-
-        Args:
-            pdf_path: Path to the PDF file
-            output_dir: Output directory path
-            method: Parsing method (auto, txt, ocr)
-            lang: Document language for OCR optimization
-            **kwargs: Additional parameters for mineru command
-
-        Returns:
-            List[Dict[str, Any]]: List of content blocks
-        """
-        try:
-            # Convert to Path object for easier handling
-            pdf_path = Path(pdf_path)
-            if not pdf_path.exists():
-                raise FileNotFoundError(f"PDF file does not exist: {pdf_path}")
-
-            name_without_suff = pdf_path.stem
-
-            # Prepare output directory
-            if output_dir:
-                base_output_dir = Path(output_dir)
+        file_names = []
+        pdf_bytes_list = []
+        language_list = []
+        
+        if not pdf_files:
+            raise ValueError("No PDF files provided")
+            
+        for i, pdf_file in enumerate(pdf_files):
+            if isinstance(pdf_file, (str, Path)):
+                # File path
+                path = Path(pdf_file)
+                if not path.exists():
+                    raise FileNotFoundError(f"PDF file not found: {path}")
+                file_names.append(path.stem)
+                pdf_bytes_list.append(read_fn(path))
+            elif isinstance(pdf_file, bytes):
+                # Raw bytes
+                file_names.append(f"document_{i}")
+                pdf_bytes_list.append(pdf_file)
             else:
-                base_output_dir = pdf_path.parent / "mineru_output"
+                raise TypeError(f"Invalid PDF file type: {type(pdf_file)}")
+                
+            # Set language
+            if languages and i < len(languages):
+                language_list.append(languages[i])
+            else:
+                language_list.append('ch')  # Default language
+                
+        return file_names, pdf_bytes_list, language_list
 
-            base_output_dir.mkdir(parents=True, exist_ok=True)
+    def _process_pipeline_backend(self, pdf_bytes_list: List[bytes], 
+                                language_list: List[str],
+                                start_page: int = 0, 
+                                end_page: Optional[int] = None) -> Tuple[List[Any], List[Any], List[Any], List[str], List[bool]]:
+        """
+        Process PDFs using pipeline backend.
+        
+        Args:
+            pdf_bytes_list: List of PDF bytes
+            language_list: List of languages
+            start_page: Start page ID
+            end_page: End page ID
+            
+        Returns:
+            Tuple of processing results
+        """
+        start_time = timer()
+        
+        # Convert PDF pages if needed
+        processed_bytes = []
+        for pdf_bytes in pdf_bytes_list:
+            with sys.modules[LOCK_KEY_MINERU]:  # Thread safety
+                new_pdf_bytes = convert_pdf_bytes_to_bytes_by_pypdfium2(
+                    pdf_bytes, start_page, end_page
+                )
+                processed_bytes.append(new_pdf_bytes)
+        
+        # Analyze documents
+        results = pipeline_doc_analyze(
+            processed_bytes, 
+            language_list, 
+            parse_method=self.parse_method,
+            formula_enable=self.formula_enable,
+            table_enable=self.table_enable
+        )
+        
+        processing_time = timer() - start_time
+        self.processing_stats['pipeline_processing_time'] = processing_time
+        logger.info(f"Pipeline processing completed in {processing_time:.2f}s")
+        
+        return results
 
-            # Run mineru command
-            self._run_mineru_command(
-                input_path=pdf_path,
-                output_dir=base_output_dir,
-                method=method,
-                lang=lang,
-                **kwargs,
+    def _process_vlm_backend(self, pdf_bytes: bytes, 
+                           image_writer: FileBasedDataWriter) -> Tuple[Dict[str, Any], List[str]]:
+        """
+        Process PDF using VLM backend.
+        
+        Args:
+            pdf_bytes: PDF bytes
+            image_writer: Image writer instance
+            
+        Returns:
+            Tuple of (middle_json, infer_result)
+        """
+        start_time = timer()
+        
+        backend = self.backend[4:] if self.backend.startswith("vlm-") else self.backend
+        
+        with sys.modules[LOCK_KEY_MINERU]:  # Thread safety
+            middle_json, infer_result = vlm_doc_analyze(
+                pdf_bytes, 
+                image_writer=image_writer, 
+                backend=backend, 
+                server_url=self.server_url
             )
+        
+        processing_time = timer() - start_time
+        self.processing_stats['vlm_processing_time'] = processing_time
+        logger.info(f"VLM processing completed in {processing_time:.2f}s")
+        
+        return middle_json, infer_result
 
-            # Read the generated output files
-            backend = kwargs.get("backend", "")
-            if backend.startswith("vlm-"):
-                method = "vlm"
+    def _generate_outputs(self, pdf_info: Dict[str, Any], 
+                         pdf_bytes: bytes,
+                         pdf_file_name: str,
+                         local_image_dir: str,
+                         local_md_dir: str,
+                         md_writer: FileBasedDataWriter,
+                         additional_data: Optional[Dict[str, Any]] = None):
+        """
+        Generate various output formats based on configuration.
+        
+        Args:
+            pdf_info: PDF information dictionary
+            pdf_bytes: Original PDF bytes
+            pdf_file_name: PDF file name
+            local_image_dir: Local image directory
+            local_md_dir: Local markdown directory
+            md_writer: Markdown writer instance
+            additional_data: Additional data for output generation
+        """
+        opts = self.output_options
+        image_dir = str(os.path.basename(local_image_dir))
+        
+        try:
+            # Draw bounding boxes
+            if opts.get('f_draw_layout_bbox', False):
+                draw_layout_bbox(pdf_info, pdf_bytes, local_md_dir, f"{pdf_file_name}_layout.pdf")
+                
+            if opts.get('f_draw_span_bbox', False) and self.backend == "pipeline":
+                draw_span_bbox(pdf_info, pdf_bytes, local_md_dir, f"{pdf_file_name}_span.pdf")
 
-            content_list, _ = self._read_output_files(
-                base_output_dir, name_without_suff, method=method
-            )
-            return content_list
+            # Dump original PDF
+            if opts.get('f_dump_orig_pdf', False):
+                md_writer.write(f"{pdf_file_name}_origin.pdf", pdf_bytes)
+
+            # Generate markdown
+            if opts.get('f_dump_md', False):
+                if self.backend == "pipeline":
+                    md_content_str = pipeline_union_make(pdf_info, opts.get('f_make_md_mode', MakeMode.MM_MD), image_dir)
+                else:
+                    md_content_str = vlm_union_make(pdf_info, opts.get('f_make_md_mode', MakeMode.MM_MD), image_dir)
+                md_writer.write_string(f"{pdf_file_name}.md", md_content_str)
+
+            # Generate content list
+            if opts.get('f_dump_content_list', False):
+                if self.backend == "pipeline":
+                    content_list = pipeline_union_make(pdf_info, MakeMode.CONTENT_LIST, image_dir)
+                else:
+                    content_list = vlm_union_make(pdf_info, MakeMode.CONTENT_LIST, image_dir)
+                md_writer.write_string(
+                    f"{pdf_file_name}_content_list.json",
+                    json.dumps(content_list, ensure_ascii=False, indent=4)
+                )
+
+            # Dump middle JSON
+            if opts.get('f_dump_middle_json', False) and additional_data and 'middle_json' in additional_data:
+                md_writer.write_string(
+                    f"{pdf_file_name}_middle.json",
+                    json.dumps(additional_data['middle_json'], ensure_ascii=False, indent=4)
+                )
+
+            # Dump model output
+            if opts.get('f_dump_model_output', False) and additional_data:
+                if 'model_json' in additional_data:
+                    md_writer.write_string(
+                        f"{pdf_file_name}_model.json",
+                        json.dumps(additional_data['model_json'], ensure_ascii=False, indent=4)
+                    )
+                elif 'infer_result' in additional_data:
+                    model_output = ("\n" + "-" * 50 + "\n").join(additional_data['infer_result'])
+                    md_writer.write_string(f"{pdf_file_name}_model_output.txt", model_output)
 
         except Exception as e:
-            logging.error(f"Error in parse_pdf: {str(e)}")
+            logger.error(f"Error generating outputs for {pdf_file_name}: {str(e)}")
             raise
 
-    def parse_image(
-        self,
-        image_path: Union[str, Path],
-        output_dir: Optional[str] = None,
-        lang: Optional[str] = None,
-        **kwargs,
-    ) -> List[Dict[str, Any]]:
+    def parse_documents(self, pdf_files: List[Union[str, Path, bytes]],
+                       output_dir: Union[str, Path],
+                       languages: Optional[List[str]] = None,
+                       start_page: int = 0,
+                       end_page: Optional[int] = None,
+                       callback: Optional[callable] = None) -> Dict[str, Any]:
         """
-        Parse image document using MinerU 2.0
-
-        Note: MinerU 2.0 natively supports .png, .jpeg, .jpg formats.
-        Other formats (.bmp, .tiff, .tif, etc.) will be automatically converted to .png.
-
+        Main method to parse PDF documents.
+        
         Args:
-            image_path: Path to the image file
-            output_dir: Output directory path
-            lang: Document language for OCR optimization
-            **kwargs: Additional parameters for mineru command
-
+            pdf_files: List of PDF file paths or bytes
+            output_dir: Output directory for results
+            languages: List of languages for each PDF
+            start_page: Start page ID for parsing (0-based)
+            end_page: End page ID for parsing (None for all pages)
+            callback: Optional callback function for progress updates
+            
         Returns:
-            List[Dict[str, Any]]: List of content blocks
+            Dictionary containing parsing results and statistics
         """
+        start_time = timer()
+        
         try:
-            # Convert to Path object for easier handling
-            image_path = Path(image_path)
-            if not image_path.exists():
-                raise FileNotFoundError(f"Image file does not exist: {image_path}")
-
-            # Supported image formats by MinerU 2.0
-            mineru_supported_formats = {".png", ".jpeg", ".jpg"}
-
-            # All supported image formats (including those we can convert)
-            all_supported_formats = {
-                ".png",
-                ".jpeg",
-                ".jpg",
-                ".bmp",
-                ".tiff",
-                ".tif",
-                ".gif",
-                ".webp",
+            # Validate inputs
+            file_names, pdf_bytes_list, language_list = self._validate_inputs(pdf_files, languages)
+            
+            results = {
+                'processed_files': [],
+                'failed_files': [],
+                'total_processing_time': 0,
+                'statistics': self.processing_stats
             }
-
-            ext = image_path.suffix.lower()
-            if ext not in all_supported_formats:
-                raise ValueError(
-                    f"Unsupported image format: {ext}. Supported formats: {', '.join(all_supported_formats)}"
+            
+            if self.backend == "pipeline":
+                # Pipeline backend processing
+                infer_results, all_image_lists, all_pdf_docs, lang_list, ocr_enabled_list = self._process_pipeline_backend(
+                    pdf_bytes_list, language_list, start_page, end_page
                 )
-
-            # Determine the actual image file to process
-            actual_image_path = image_path
-            temp_converted_file = None
-
-            # If format is not natively supported by MinerU, convert it
-            if ext not in mineru_supported_formats:
-                logging.info(
-                    f"Converting {ext} image to PNG for MinerU compatibility..."
-                )
-
-                try:
-                    from PIL import Image
-                except ImportError:
-                    raise RuntimeError(
-                        "PIL/Pillow is required for image format conversion. "
-                        "Please install it using: pip install Pillow"
-                    )
-
-                # Create temporary directory for conversion
-                temp_dir = Path(tempfile.mkdtemp())
-                temp_converted_file = temp_dir / f"{image_path.stem}_converted.png"
-
-                try:
-                    # Open and convert image
-                    with Image.open(image_path) as img:
-                        # Handle different image modes
-                        if img.mode in ("RGBA", "LA", "P"):
-                            # For images with transparency or palette, convert to RGB first
-                            if img.mode == "P":
-                                img = img.convert("RGBA")
-
-                            # Create white background for transparent images
-                            background = Image.new("RGB", img.size, (255, 255, 255))
-                            if img.mode == "RGBA":
-                                background.paste(
-                                    img, mask=img.split()[-1]
-                                )  # Use alpha channel as mask
-                            else:
-                                background.paste(img)
-                            img = background
-                        elif img.mode not in ("RGB", "L"):
-                            # Convert other modes to RGB
-                            img = img.convert("RGB")
-
-                        # Save as PNG
-                        img.save(temp_converted_file, "PNG", optimize=True)
-                        logging.info(
-                            f"Successfully converted {image_path.name} to PNG ({temp_converted_file.stat().st_size / 1024:.1f} KB)"
-                        )
-
-                        actual_image_path = temp_converted_file
-
-                except Exception as e:
-                    if temp_converted_file and temp_converted_file.exists():
-                        temp_converted_file.unlink()
-                    raise RuntimeError(
-                        f"Failed to convert image {image_path.name}: {str(e)}"
-                    )
-
-            name_without_suff = image_path.stem
-
-            # Prepare output directory
-            if output_dir:
-                base_output_dir = Path(output_dir)
-            else:
-                base_output_dir = image_path.parent / "mineru_output"
-
-            base_output_dir.mkdir(parents=True, exist_ok=True)
-
-            try:
-                # Run mineru command (images are processed with OCR method)
-                self._run_mineru_command(
-                    input_path=actual_image_path,
-                    output_dir=base_output_dir,
-                    method="ocr",  # Images require OCR method
-                    lang=lang,
-                    **kwargs,
-                )
-
-                # Read the generated output files
-                content_list, _ = self._read_output_files(
-                    base_output_dir, name_without_suff, method="ocr"
-                )
-                return content_list
-
-            finally:
-                # Clean up temporary converted file if it was created
-                if temp_converted_file and temp_converted_file.exists():
+                
+                for idx, model_list in enumerate(infer_results):
                     try:
-                        temp_converted_file.unlink()
-                        temp_converted_file.parent.rmdir()  # Remove temp directory if empty
-                    except Exception:
-                        pass  # Ignore cleanup errors
-
+                        file_name = file_names[idx]
+                        model_json = copy.deepcopy(model_list)
+                        
+                        # Prepare environment
+                        local_image_dir, local_md_dir = prepare_env(output_dir, file_name, self.parse_method)
+                        image_writer = FileBasedDataWriter(local_image_dir)
+                        md_writer = FileBasedDataWriter(local_md_dir)
+                        
+                        # Process to middle JSON
+                        images_list = all_image_lists[idx]
+                        pdf_doc = all_pdf_docs[idx]
+                        _lang = lang_list[idx]
+                        _ocr_enable = ocr_enabled_list[idx]
+                        
+                        middle_json = pipeline_result_to_middle_json(
+                            model_list, images_list, pdf_doc, image_writer, 
+                            _lang, _ocr_enable, self.formula_enable
+                        )
+                        
+                        pdf_info = middle_json["pdf_info"]
+                        pdf_bytes = pdf_bytes_list[idx]
+                        
+                        # Generate outputs
+                        self._generate_outputs(
+                            pdf_info, pdf_bytes, file_name, local_image_dir, local_md_dir, md_writer,
+                            {'middle_json': middle_json, 'model_json': model_json}
+                        )
+                        
+                        results['processed_files'].append({
+                            'file_name': file_name,
+                            'output_dir': local_md_dir,
+                            'pages_processed': len(images_list)
+                        })
+                        
+                        if callback:
+                            callback(progress=(idx + 1) / len(pdf_bytes_list), 
+                                   message=f"Processed {file_name}")
+                            
+                        logger.info(f"Successfully processed {file_name}, output saved to {local_md_dir}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to process {file_names[idx]}: {str(e)}")
+                        results['failed_files'].append({
+                            'file_name': file_names[idx],
+                            'error': str(e)
+                        })
+            
+            else:
+                # VLM backend processing
+                for idx, pdf_bytes in enumerate(pdf_bytes_list):
+                    try:
+                        file_name = file_names[idx]
+                        
+                        # Convert PDF bytes
+                        pdf_bytes = convert_pdf_bytes_to_bytes_by_pypdfium2(pdf_bytes, start_page, end_page)
+                        
+                        # Prepare environment
+                        local_image_dir, local_md_dir = prepare_env(output_dir, file_name, "vlm")
+                        image_writer = FileBasedDataWriter(local_image_dir)
+                        md_writer = FileBasedDataWriter(local_md_dir)
+                        
+                        # Process with VLM
+                        middle_json, infer_result = self._process_vlm_backend(pdf_bytes, image_writer)
+                        pdf_info = middle_json["pdf_info"]
+                        
+                        # Generate outputs
+                        self._generate_outputs(
+                            pdf_info, pdf_bytes, file_name, local_image_dir, local_md_dir, md_writer,
+                            {'middle_json': middle_json, 'infer_result': infer_result}
+                        )
+                        
+                        results['processed_files'].append({
+                            'file_name': file_name,
+                            'output_dir': local_md_dir,
+                            'backend': self.backend
+                        })
+                        
+                        if callback:
+                            callback(progress=(idx + 1) / len(pdf_bytes_list), 
+                                   message=f"Processed {file_name}")
+                            
+                        logger.info(f"Successfully processed {file_name}, output saved to {local_md_dir}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to process {file_names[idx]}: {str(e)}")
+                        results['failed_files'].append({
+                            'file_name': file_names[idx],
+                            'error': str(e)
+                        })
+            
+            total_time = timer() - start_time
+            results['total_processing_time'] = total_time
+            self.processing_stats['total_time'] = total_time
+            
+            logger.info(f"Document parsing completed in {total_time:.2f}s. "
+                      f"Processed: {len(results['processed_files'])}, "
+                      f"Failed: {len(results['failed_files'])}")
+            
+            return results
+            
         except Exception as e:
-            logging.error(f"Error in parse_image: {str(e)}")
+            logger.error(f"Document parsing failed: {str(e)}")
             raise
 
-    def parse_office_doc(
-        self,
-        doc_path: Union[str, Path],
-        output_dir: Optional[str] = None,
-        lang: Optional[str] = None,
-        **kwargs,
-    ) -> List[Dict[str, Any]]:
-        """
-        Parse office document by first converting to PDF, then parsing with MinerU 2.0
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get processing statistics."""
+        return self.processing_stats.copy()
 
-        Note: This method requires LibreOffice to be installed separately for PDF conversion.
-        MinerU 2.0 no longer includes built-in Office document conversion.
+    @staticmethod
+    def get_supported_backends() -> List[str]:
+        """Get list of supported backends."""
+        return ["pipeline", "vlm-transformers", "vlm-sglang-engine", "vlm-sglang-client"]
 
-        Supported formats: .doc, .docx, .ppt, .pptx, .xls, .xlsx
+    @staticmethod
+    def get_supported_languages() -> List[str]:
+        """Get list of supported languages."""
+        return ['ch', 'ch_server', 'ch_lite', 'en', 'korean', 'japan', 'chinese_cht', 'ta', 'te', 'ka']
 
-        Args:
-            doc_path: Path to the document file (.doc, .docx, .ppt, .pptx, .xls, .xlsx)
-            output_dir: Output directory path
-            lang: Document language for OCR optimization
-            **kwargs: Additional parameters for mineru command
 
-        Returns:
-            List[Dict[str, Any]]: List of content blocks
-        """
-        try:
-            # Convert Office document to PDF using base class method
-            pdf_path = self.convert_office_to_pdf(doc_path, output_dir)
 
-            # Parse the converted PDF
-            return self.parse_pdf(
-                pdf_path=pdf_path, output_dir=output_dir, lang=lang, **kwargs
-            )
 
-        except Exception as e:
-            logging.error(f"Error in parse_office_doc: {str(e)}")
-            raise
 
-    def parse_text_file(
-        self,
-        text_path: Union[str, Path],
-        output_dir: Optional[str] = None,
-        lang: Optional[str] = None,
-        **kwargs,
-    ) -> List[Dict[str, Any]]:
-        """
-        Parse text file by first converting to PDF, then parsing with MinerU 2.0
-
-        Supported formats: .txt, .md
-
-        Args:
-            text_path: Path to the text file (.txt, .md)
-            output_dir: Output directory path
-            lang: Document language for OCR optimization
-            **kwargs: Additional parameters for mineru command
-
-        Returns:
-            List[Dict[str, Any]]: List of content blocks
-        """
-        try:
-            # Convert text file to PDF using base class method
-            pdf_path = self.convert_text_to_pdf(text_path, output_dir)
-
-            # Parse the converted PDF
-            return self.parse_pdf(
-                pdf_path=pdf_path, output_dir=output_dir, lang=lang, **kwargs
-            )
-
-        except Exception as e:
-            logging.error(f"Error in parse_text_file: {str(e)}")
-            raise
-
-    def parse_document(
-        self,
-        file_path: Union[str, Path],
-        method: str = "auto",
-        output_dir: Optional[str] = None,
-        lang: Optional[str] = None,
-        **kwargs,
-    ) -> List[Dict[str, Any]]:
-        """
-        Parse document using MinerU 2.0 based on file extension
-
-        Args:
-            file_path: Path to the file to be parsed
-            method: Parsing method (auto, txt, ocr)
-            output_dir: Output directory path
-            lang: Document language for OCR optimization
-            **kwargs: Additional parameters for mineru command
-
-        Returns:
-            List[Dict[str, Any]]: List of content blocks
-        """
-        # Convert to Path object
-        file_path = Path(file_path)
-        if not file_path.exists():
-            raise FileNotFoundError(f"File does not exist: {file_path}")
-
-        # Get file extension
-        ext = file_path.suffix.lower()
-
-        # Choose appropriate parser based on file type
-        if ext == ".pdf":
-            return self.parse_pdf(file_path, output_dir, method, lang, **kwargs)
-        elif ext in self.IMAGE_FORMATS:
-            return self.parse_image(file_path, output_dir, lang, **kwargs)
-        elif ext in self.OFFICE_FORMATS:
-            logging.warning(
-                f"Warning: Office document detected ({ext}). "
-                f"MinerU 2.0 requires conversion to PDF first."
-            )
-            return self.parse_office_doc(file_path, output_dir, lang, **kwargs)
-        elif ext in self.TEXT_FORMATS:
-            return self.parse_text_file(file_path, output_dir, lang, **kwargs)
-        else:
-            # For unsupported file types, try as PDF
-            logging.warning(
-                f"Warning: Unsupported file extension '{ext}', "
-                f"attempting to parse as PDF"
-            )
-            return self.parse_pdf(file_path, output_dir, method, lang, **kwargs)
-
-    def check_installation(self) -> bool:
-        """
-        Check if MinerU 2.0 is properly installed
-
-        Returns:
-            bool: True if installation is valid, False otherwise
-        """
-        try:
-            # Prepare subprocess parameters to hide console window on Windows
-            import platform
-
-            subprocess_kwargs = {
-                "capture_output": True,
-                "text": True,
-                "check": True,
-                "encoding": "utf-8",
-                "errors": "ignore",
+# Example usage with  MinerU parser
+if __name__ == '__main__':
+    
+    __dir__ = os.path.dirname(os.path.abspath(__file__))
+    pdf_files_dir = os.path.join(__dir__, "pdfs")
+    output_dir = os.path.join(__dir__, "output")
+    
+    # Find PDF and image files
+    pdf_suffixes = [".pdf"]
+    image_suffixes = [".png", ".jpeg", ".jpg"]
+    
+    doc_path_list = []
+    for doc_path in Path(pdf_files_dir).glob('*'):
+        if doc_path.suffix in pdf_suffixes + image_suffixes:
+            doc_path_list.append(doc_path)
+    
+    if doc_path_list:
+        parser_config = {
+            'backend': 'pipeline',
+            'parse_method': 'auto',
+            'formula_enable': True,
+            'table_enable': True,
+            'output_options': {
+                'f_draw_layout_bbox': False,
+                'f_draw_span_bbox': False,
+                'f_dump_md': True,
+                'f_dump_middle_json': False,
+                'f_dump_model_output': False,
+                'f_dump_orig_pdf': False,
+                'f_dump_content_list': False,
+                'f_make_md_mode': MakeMode.MM_MD
             }
-
-            # Hide console window on Windows
-            if platform.system() == "Windows":
-                subprocess_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-
-            result = subprocess.run(["mineru", "--version"], **subprocess_kwargs)
-            logging.debug(f"MinerU version: {result.stdout.strip()}")
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            logging.debug(
-                "MinerU 2.0 is not properly installed. "
-                "Please install it using: pip install -U 'mineru[core]'"
-            )
-            return False
-
+        }
+        
+        parser = MinerUPdfParser(**parser_config)
+        
+        def progress_callback(progress, message):
+            print(f"Progress: {progress*100:.1f}% - {message}")
+        
+        results = parser.parse_documents(
+            pdf_files=doc_path_list,
+            output_dir=output_dir,
+            callback=progress_callback
+        )
+        
+    else:
+        print(f"No PDF files found in {pdf_files_dir}")
