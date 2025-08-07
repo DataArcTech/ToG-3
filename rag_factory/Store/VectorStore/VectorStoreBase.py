@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 VST = TypeVar("VST", bound="VectorStore")
+from ...Retrieval.Retriever.Retriever_VectorStore import VectorStoreRetriever
 
 
 @dataclass
@@ -627,11 +628,10 @@ class VectorStore(ABC):
     
     def as_retriever(self, **kwargs: Any) -> "VectorStoreRetriever":
         """从此VectorStore返回初始化的VectorStoreRetriever"""
-        from Retrieval import VectorStoreRetriever
         tags = kwargs.pop("tags", None) or [] + self._get_retriever_tags()
         return VectorStoreRetriever(vectorstore=self, tags=tags, **kwargs)
 
-
+W
 
 
 
