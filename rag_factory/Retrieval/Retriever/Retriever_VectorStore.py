@@ -141,9 +141,15 @@ class VectorStoreRetriever(BaseRetriever):
         # 合并搜索参数
         search_params = {**self.search_kwargs, **kwargs}
         
+        # 获取返回文档数量，参考BM25Retriever的做法
+        k = search_params.get('k', getattr(self, 'k', 5))
+        search_params['k'] = k
+        
         try:
             if self.search_type == "similarity":
                 docs = self.vectorstore.similarity_search(query, **search_params)
+                # 确保返回前k个文档
+                docs = docs[:k]
                 
             elif self.search_type == "similarity_score_threshold":
                 docs_and_similarities = (
@@ -152,11 +158,15 @@ class VectorStoreRetriever(BaseRetriever):
                     )
                 )
                 docs = [doc for doc, _ in docs_and_similarities]
+                # 确保返回前k个文档
+                docs = docs[:k]
                 
             elif self.search_type == "mmr":
                 docs = self.vectorstore.max_marginal_relevance_search(
                     query, **search_params
                 )
+                # 确保返回前k个文档
+                docs = docs[:k]
                 
             else:
                 msg = f"不支持的搜索类型: {self.search_type}"
