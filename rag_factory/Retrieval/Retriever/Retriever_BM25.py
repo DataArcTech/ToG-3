@@ -9,12 +9,12 @@ from dataclasses import dataclass, field
 from pydantic import ConfigDict, Field, model_validator
 
 logger = logging.getLogger(__name__)
-
+import numpy as np
 from rag_factory.Retrieval.RetrieverBase import BaseRetriever, Document
 
 
 def default_preprocessing_func(text: str) -> List[str]:
-    """默认的文本预处理函数
+    """默认的文本预处理函数，仅在英文文本上有效
     
     Args:
         text: 输入文本
@@ -25,33 +25,51 @@ def default_preprocessing_func(text: str) -> List[str]:
     return text.split()
 
 
-def chinese_preprocessing_func(text: str) -> List[str]:
-    """中文文本预处理函数
-    
-    Args:
-        text: 输入的中文文本
-        
-    Returns:
-        分词后的词语列表
-    """
-    try:
-        import jieba
-        return list(jieba.cut(text))
-    except ImportError:
-        logger.warning("jieba 未安装，使用默认分词方法。请安装: pip install jieba")
-        return text.split()
 
 
 class BM25Retriever(BaseRetriever):
-    """BM25 检索器实现
-    
-    基于 BM25 算法的文档检索器。
-    使用 rank_bm25 库实现高效的 BM25 搜索。
-    
-    注意：BM25 算法适用于相对静态的文档集合。虽然支持动态添加/删除文档，
-    但每次操作都会重建整个索引，在大型文档集合上可能有性能问题。
-    对于频繁更新的场景，建议使用 VectorStoreRetriever。
-    
+    """
+    BM25Retriever 是一个基于 BM25 算法的文档检索器，适用于信息检索、问答系统、知识库等场景下的高效文本相关性排序。
+
+    该类通过集成 rank_bm25 库，实现了对文档集合的 BM25 检索，支持文档的动态添加、删除、批量构建索引等操作。
+    适合文档集合相对静态、检索速度要求较高的场景。对于频繁增删文档的场景，建议使用向量检索（如 VectorStoreRetriever）。
+
+    主要特性：
+    - 支持从文本列表或 Document 对象列表快速构建 BM25 检索器。
+    - 支持自定义分词/预处理函数，适配不同语言和分词需求。
+    - 支持动态添加、删除文档（每次操作会重建索引，适合中小规模数据集）。
+    - 可获取检索分数、top-k 文档及分数、检索器配置信息等。
+    - 兼容异步文档添加/删除，便于大规模数据处理。
+    - 通过 Pydantic 校验参数，保证配置安全。
+
+    主要参数：
+        vectorizer (Any): BM25 向量化器实例（通常为 BM25Okapi）。
+        docs (List[Document]): 当前检索器持有的文档对象列表。
+        k (int): 默认返回的相关文档数量。
+        preprocess_func (Callable): 文本分词/预处理函数，默认为空格分词。
+        bm25_params (Dict): 传递给 BM25Okapi 的参数（如 k1、b 等）。
+
+    核心方法：
+        - from_texts/from_documents: 从原始文本或 Document 构建检索器。
+        - _get_relevant_documents: 检索与查询最相关的前 k 个文档。
+        - get_scores: 获取查询对所有文档的 BM25 分数。
+        - get_top_k_with_scores: 获取 top-k 文档及其分数。
+        - add_documents/delete_documents: 动态增删文档并重建索引。
+        - get_bm25_info: 获取检索器配置信息和统计。
+        - update_k: 动态调整返回文档数量。
+
+    性能注意事项：
+        - 每次添加/删除文档都会重建 BM25 索引，适合文档量较小或更新不频繁的场景。
+        - 文档量较大或频繁更新时，建议使用向量检索方案。
+        - 支持异步操作，便于大规模数据处理。
+
+    典型用法：
+        >>> retriever = BM25Retriever.from_texts(["文本1", "文本2"], k=3)
+        >>> results = retriever._get_relevant_documents("查询语句")
+        >>> retriever.add_documents([Document(content="新文档")])
+        >>> retriever.delete_documents(ids=["doc_id"])
+        >>> info = retriever.get_bm25_info()
+
     Attributes:
         vectorizer: BM25 向量化器实例
         docs: 文档列表
@@ -125,7 +143,7 @@ class BM25Retriever(BaseRetriever):
         Returns:
             验证后的值
         """
-        k = values.get("k", 4)
+        k = values.get("k", 5)
         if k <= 0:
             raise ValueError(f"k 必须大于 0，当前值: {k}")
         
@@ -259,46 +277,48 @@ class BM25Retriever(BaseRetriever):
         )
     
     def _get_relevant_documents(self, query: str, **kwargs: Any) -> List[Document]:
-        """获取与查询相关的文档
-        
+        """获取与查询相关的前k个文档
+
         Args:
             query: 查询字符串
             **kwargs: 其他参数，可能包含 'k' 来覆盖默认的返回数量
-            
+
         Returns:
             相关文档列表
-            
+
         Raises:
             ValueError: 如果向量化器未初始化
         """
         if self.vectorizer is None:
             raise ValueError("BM25 向量化器未初始化")
-        
+
         if not self.docs:
             logger.warning("文档列表为空，返回空结果")
             return []
-        
+
         # 获取返回文档数量
         k = kwargs.get('k', self.k)
         k = min(k, len(self.docs))  # 确保不超过总文档数
-        
+
         try:
             # 预处理查询
             processed_query = self.preprocess_func(query)
             logger.debug(f"预处理后的查询: {processed_query}")
+
+            # 获取所有文档的分数
+            scores = self.vectorizer.get_scores(processed_query)
+            # 获取分数最高的前k个文档索引
             
-            # 获取相关文档
-            relevant_docs = self.vectorizer.get_top_n(
-                processed_query, self.docs, n=k
-            )
-            
-            logger.debug(f"找到 {len(relevant_docs)} 个相关文档")
-            return relevant_docs
-            
+            top_indices = np.argsort(scores)[::-1][:k]
+            # 返回前k个文档
+            top_docs = [self.docs[idx] for idx in top_indices]
+            logger.debug(f"找到 {len(top_docs)} 个相关文档")
+            return top_docs
+
         except Exception as e:
             logger.error(f"BM25 搜索时发生错误: {e}")
             raise
-    
+
     def get_scores(self, query: str) -> List[float]:
         """获取查询对所有文档的 BM25 分数
         
