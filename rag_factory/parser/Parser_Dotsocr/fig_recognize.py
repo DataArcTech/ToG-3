@@ -9,7 +9,6 @@ from dashscope import MultiModalConversation
 import argparse
 from pathlib import Path
 
-os.environ["DASHSCOPE_API_KEY"] = "your api key"
 
 def fig_understand(fig_path):
     # prompt = '请给出图像中具体内容信息，并用json格式输出,仅输出json格式数据，其中，图片类型请从["chart","knowladge_map","other"]中选择'
@@ -178,9 +177,7 @@ def main():
         print(f"'{args.output}' no exist")
 
 if __name__ == "__main__":
-    # files = sorted(glob.glob('/home/yangcehao/doc_analysis/Parser_Dotsocr/output'+'/*_layout.json'))
-    # for file in files:
-    #     data = process_one_file(file)
+    os.environ["DASHSCOPE_API_KEY"] = "your api key"
     main()
 
 
