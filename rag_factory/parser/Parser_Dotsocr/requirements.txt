@@ -10,3 +10,4 @@ modelscope
 flash-attn==2.8.0.post2
 # for GLIBC 2.31, please use flash-attn==2.7.4.post1 instead of flash-attn==2.8.0.post2
 accelerate
+dashscope
