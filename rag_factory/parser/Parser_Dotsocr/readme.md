@@ -42,5 +42,6 @@ If you want to parse document with transformers，add `--use_hf=True`
 ## 4. figure understand
 
 Use vl model to understand content in parsed picture. Please obtain pdf layout parsed result first.
-
-python fig_recognize.py --output_path
+```
+python fig_recognize.py --output output
+```
