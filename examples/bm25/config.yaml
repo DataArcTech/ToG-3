@@ -1,0 +1,3 @@
+retriever:
+  name: bm25
+  k: 8
