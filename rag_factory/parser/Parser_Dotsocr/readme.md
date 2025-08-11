@@ -37,4 +37,4 @@ python vllm_launch.py --model_path dots_model_path
 python parser.py pdf_path.pdf 
 ```
 
-Iif you want to parse document with transformers，add `--use_hf=True`
+If you want to parse document with transformers，add `--use_hf=True`
