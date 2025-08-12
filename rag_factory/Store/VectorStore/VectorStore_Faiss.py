@@ -4,20 +4,21 @@ import pickle
 import os
 import uuid
 import numpy as np
-from typing import Any, Optional, Callable
+from typing import Any, Optional, Callable, List, Tuple
 from .VectorStoreBase import VectorStore, Document
-from Embed import Embeddings
+from ...Embed.Embedding_Base import Embeddings
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+# TODO 需要支持GPU,提高速度
 
 def _mmr_select(
-    docs_and_scores: list[tuple[Document, float]],
-    embeddings: list[list[float]],
-    query_embedding: list[float],
+    docs_and_scores: List[Tuple[Document, float]],
+    embeddings: List[List[float]],
+    query_embedding: List[float],
     k: int,
     lambda_mult: float = 0.5,
-) -> list[Document]:
+) -> List[Document]:
     """最大边际相关性选择算法"""
     if k >= len(docs_and_scores):
         return [doc for doc, _ in docs_and_scores]
@@ -153,12 +154,12 @@ class FaissVectorStore(VectorStore):
     
     def add_texts(
         self,
-        texts: list[str],
-        metadatas: Optional[list[dict]] = None,
+        texts: List[str],
+        metadatas: Optional[List[dict]] = None,
         *,
-        ids: Optional[list[str]] = None,
+        ids: Optional[List[str]] = None,
         **kwargs: Any,
-    ) -> list[str]:
+    ) -> List[str]:
         """添加文本到向量存储"""
         if not texts:
             return []
@@ -209,12 +210,12 @@ class FaissVectorStore(VectorStore):
     
     async def aadd_texts(
         self,
-        texts: list[str],
-        metadatas: Optional[list[dict]] = None,
+        texts: List[str],
+        metadatas: Optional[List[dict]] = None,
         *,
-        ids: Optional[list[str]] = None,
+        ids: Optional[List[str]] = None,
         **kwargs: Any,
-    ) -> list[str]:
+    ) -> List[str]:
         """异步添加文本"""
         return await asyncio.get_event_loop().run_in_executor(
             ThreadPoolExecutor(), self.add_texts, texts, metadatas, ids, **kwargs
@@ -222,14 +223,14 @@ class FaissVectorStore(VectorStore):
     
     def similarity_search(
         self, query: str, k: int = 4, **kwargs: Any
-    ) -> list[Document]:
+    ) -> List[Document]:
         """相似性搜索"""
         docs_and_scores = self.similarity_search_with_score(query, k, **kwargs)
         return [doc for doc, _ in docs_and_scores]
     
     def similarity_search_with_score(
         self, query: str, k: int = 4, **kwargs: Any
-    ) -> list[tuple[Document, float]]:
+    ) -> List[Tuple[Document, float]]:
         """带分数的相似性搜索"""
         if self.index is None or self.index.ntotal == 0:
             return []
@@ -239,15 +240,15 @@ class FaissVectorStore(VectorStore):
         return self.similarity_search_by_vector_with_score(query_embedding, k, **kwargs)
     
     def similarity_search_by_vector(
-        self, embedding: list[float], k: int = 4, **kwargs: Any
-    ) -> list[Document]:
+        self, embedding: List[float], k: int = 4, **kwargs: Any
+    ) -> List[Document]:
         """根据向量相似性搜索"""
         docs_and_scores = self.similarity_search_by_vector_with_score(embedding, k, **kwargs)
         return [doc for doc, _ in docs_and_scores]
     
     def similarity_search_by_vector_with_score(
-        self, embedding: list[float], k: int = 4, **kwargs: Any
-    ) -> list[tuple[Document, float]]:
+        self, embedding: List[float], k: int = 4, **kwargs: Any
+    ) -> List[Tuple[Document, float]]:
         """根据向量带分数的相似性搜索"""
         if self.index is None or self.index.ntotal == 0:
             return []
@@ -278,7 +279,7 @@ class FaissVectorStore(VectorStore):
         fetch_k: int = 20,
         lambda_mult: float = 0.5,
         **kwargs: Any,
-    ) -> list[Document]:
+    ) -> List[Document]:
         """最大边际相关性搜索"""
         if self.index is None or self.index.ntotal == 0:
             return []
@@ -324,12 +325,12 @@ class FaissVectorStore(VectorStore):
     
     def max_marginal_relevance_search_by_vector(
         self,
-        embedding: list[float],
+        embedding: List[float],
         k: int = 4,
         fetch_k: int = 20,
         lambda_mult: float = 0.5,
         **kwargs: Any,
-    ) -> list[Document]:
+    ) -> List[Document]:
         """根据向量的最大边际相关性搜索"""
         if self.index is None or self.index.ntotal == 0:
             return []
@@ -369,7 +370,7 @@ class FaissVectorStore(VectorStore):
         
         return selected_docs
     
-    def delete(self, ids: Optional[list[str]] = None, **kwargs: Any) -> Optional[bool]:
+    def delete(self, ids: Optional[List[str]] = None, **kwargs: Any) -> Optional[bool]:
         """删除文档（FAISS不支持直接删除，需要重建索引）"""
         if ids is None:
             # 删除所有
@@ -412,7 +413,7 @@ class FaissVectorStore(VectorStore):
         
         return True
     
-    def get_by_ids(self, ids: list[str]) -> list[Document]:
+    def get_by_ids(self, ids: List[str]) -> List[Document]:
         """根据ID获取文档"""
         return [self.docstore[doc_id] for doc_id in ids if doc_id in self.docstore]
     
@@ -482,11 +483,11 @@ class FaissVectorStore(VectorStore):
     @classmethod
     def from_texts(
         cls,
-        texts: list[str],
+        texts: List[str],
         embedding: Embeddings,
-        metadatas: Optional[list[dict]] = None,
+        metadatas: Optional[List[dict]] = None,
         *,
-        ids: Optional[list[str]] = None,
+        ids: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> "FaissVectorStore":
         """从文本创建FAISS向量存储"""
@@ -497,11 +498,11 @@ class FaissVectorStore(VectorStore):
     @classmethod
     async def afrom_texts(
         cls,
-        texts: list[str],
+        texts: List[str],
         embedding: Embeddings,
-        metadatas: Optional[list[dict]] = None,
+        metadatas: Optional[List[dict]] = None,
         *,
-        ids: Optional[list[str]] = None,
+        ids: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> "FaissVectorStore":
         """异步从文本创建FAISS向量存储"""

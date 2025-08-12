@@ -15,6 +15,7 @@ from typing import (
     Sequence,
     Iterable,
     Iterator,
+    Tuple,
 )
 from itertools import cycle
 import asyncio
@@ -23,6 +24,7 @@ from dataclasses import dataclass, field
 if TYPE_CHECKING:
     from collections.abc import Collection
     from rag_factory.Embed import Embeddings
+    from ...Retrieval.Retriever.Retriever_VectorStore import VectorStoreRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +295,7 @@ class VectorStore(ABC):
     
     def similarity_search_with_score(
         self, *args: Any, **kwargs: Any
-    ) -> list[tuple[Document, float]]:
+    ) -> list[Tuple[Document, float]]:
         """使用距离运行相似性搜索
         
         Args:
@@ -307,7 +309,7 @@ class VectorStore(ABC):
     
     async def asimilarity_search_with_score(
         self, *args: Any, **kwargs: Any
-    ) -> list[tuple[Document, float]]:
+    ) -> list[Tuple[Document, float]]:
         """异步使用距离运行相似性搜索"""
         return await asyncio.get_event_loop().run_in_executor(
             ThreadPoolExecutor(), self.similarity_search_with_score, *args, **kwargs
@@ -318,7 +320,7 @@ class VectorStore(ABC):
         query: str,
         k: int = 4,
         **kwargs: Any,
-    ) -> list[tuple[Document, float]]:
+    ) -> list[Tuple[Document, float]]:
         """默认的带相关性分数的相似性搜索
         
         必要时在子类中修改。
@@ -344,7 +346,7 @@ class VectorStore(ABC):
         query: str,
         k: int = 4,
         **kwargs: Any,
-    ) -> list[tuple[Document, float]]:
+    ) -> list[Tuple[Document, float]]:
         """异步带相关性分数的相似性搜索"""
         relevance_score_fn = self._select_relevance_score_fn()
         docs_and_scores = await self.asimilarity_search_with_score(query, k, **kwargs)
@@ -355,7 +357,7 @@ class VectorStore(ABC):
         query: str,
         k: int = 4,
         **kwargs: Any,
-    ) -> list[tuple[Document, float]]:
+    ) -> list[Tuple[Document, float]]:
         """返回[0, 1]范围内的文档和相关性分数
         
         0表示不相似，1表示最相似。
@@ -402,7 +404,7 @@ class VectorStore(ABC):
         query: str,
         k: int = 4,
         **kwargs: Any,
-    ) -> list[tuple[Document, float]]:
+    ) -> list[Tuple[Document, float]]:
         """异步返回[0, 1]范围内的文档和相关性分数"""
         score_threshold = kwargs.pop("score_threshold", None)
         
@@ -627,10 +629,10 @@ class VectorStore(ABC):
     
     def as_retriever(self, **kwargs: Any) -> "VectorStoreRetriever":
         """从此VectorStore返回初始化的VectorStoreRetriever"""
-        from Retrieval import VectorStoreRetriever
+        # 延迟导入以避免循环依赖
+        from ...Retrieval.Retriever.Retriever_VectorStore import VectorStoreRetriever
         tags = kwargs.pop("tags", None) or [] + self._get_retriever_tags()
         return VectorStoreRetriever(vectorstore=self, tags=tags, **kwargs)
-
 
 
 

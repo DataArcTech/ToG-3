@@ -1,7 +1,7 @@
 # VectorStore/registry.py
-from typing import Dict, Type, Any, Optional
+from typing import Dict, Type, Any, Optional, List
 from .VectorStoreBase import VectorStore
-from Embed.Embedding_Base import Embeddings
+from ...Embed.Embedding_Base import Embeddings
 from .VectorStore_Faiss import FaissVectorStore
 
 
@@ -22,9 +22,21 @@ class VectorStoreRegistry:
             raise ValueError(f"未注册的向量存储类型: {name}")
         
         return cls._stores[name](embedding=embedding, **kwargs)
+
+    @classmethod
+    def load(cls, name: str, folder_path: str, embedding: Embeddings, **kwargs) -> VectorStore:
+        """加载已保存的向量存储实例"""
+        if name not in cls._stores:
+            raise ValueError(f"未注册的向量存储类型: {name}")
+        store_class = cls._stores[name]
+        if hasattr(store_class, "load_local"):
+            return store_class.load_local(folder_path, embeddings=embedding, **kwargs)
+        else:
+            raise ValueError(f"{store_class.__name__} 不支持从本地加载")
+
     
     @classmethod
-    def list_available(cls) -> list[str]:
+    def list_available(cls) -> List[str]:
         """列出可用的向量存储类型"""
         return list(cls._stores.keys())
 

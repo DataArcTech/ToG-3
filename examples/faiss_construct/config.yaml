@@ -1,0 +1,14 @@
+store:
+  name: faiss # 数据库
+  folder_path: /data/FinAi_Mapping_Knowledge/chenmingzhen/test_faiss_store # 保存路径
+  
+
+embedding:
+  name: huggingface # 嵌入模型
+  model_name: "/finance_ML/dataarc_syn_database/model/Qwen/qwen_embedding_0.6B" # 模型路径
+  model_kwargs:
+    device: "cuda:1" # 设备
+
+dataset:
+  name: TCL
+  data_path: /data/FinAi_Mapping_Knowledge/chenmingzhen/tog3_backend/TCL/syn_table_data/data_all_clearn_short_chunk_with_caption_desc.json

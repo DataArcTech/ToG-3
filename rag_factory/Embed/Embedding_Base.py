@@ -2,12 +2,13 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from typing import List
 
 class Embeddings(ABC):
     """嵌入接口"""
     
     @abstractmethod
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
         """Embed search docs.
 
         Args:
@@ -19,7 +20,7 @@ class Embeddings(ABC):
         pass
     
     @abstractmethod
-    def embed_query(self, text: str) -> list[float]:
+    def embed_query(self, text: str) -> List[float]:
         """Embed query text.
 
         Args:
@@ -30,7 +31,7 @@ class Embeddings(ABC):
         """
         pass
     
-    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+    async def aembed_documents(self, texts: List[str]) -> List[List[float]]:
         """Asynchronous Embed search docs.
 
         Args:
@@ -43,7 +44,7 @@ class Embeddings(ABC):
             ThreadPoolExecutor(), self.embed_documents, texts
         )
     
-    async def aembed_query(self, text: str) -> list[float]:
+    async def aembed_query(self, text: str) -> List[float]:
         """Asynchronous Embed query text.
 
         Args:
