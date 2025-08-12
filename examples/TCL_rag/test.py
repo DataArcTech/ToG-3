@@ -24,7 +24,9 @@ if __name__ == "__main__":
                 vector_store_config=vector_store_config,
                 bm25_retriever_config=bm25_retriever_config)
 
-    result = rag.invoke("毛细管设计规范按照什么标准",k=20)
+    result = rag.invoke("毛细管设计规范按照什么标准",k=50)
+
+    result = rag.rerank("毛细管设计规范按照什么标准",result,k=10)
 
     answer = rag.answer("毛细管设计规范按照什么标准",result)
 
