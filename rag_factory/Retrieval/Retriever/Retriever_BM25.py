@@ -5,7 +5,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence
 from dataclasses import dataclass, field
-
+import uuid
 from pydantic import ConfigDict, Field, model_validator
 
 logger = logging.getLogger(__name__)
@@ -207,7 +207,7 @@ class BM25Retriever(BaseRetriever):
                     f"与 texts 长度 ({len(texts_list)}) 不匹配"
                 )
         else:
-            ids_list = [None for _ in texts_list]
+            ids_list = [str(uuid.uuid4()) for _ in texts_list]
         
         # 预处理文本
         logger.info(f"正在预处理 {len(texts_list)} 个文本...")
