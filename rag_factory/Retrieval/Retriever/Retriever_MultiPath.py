@@ -50,8 +50,8 @@ class MultiPathRetriever(BaseRetriever):
             
         Note:
             - 每个检索器的结果会被转换为RetrievalResult格式
-            - 支持多种输入格式：Document对象、字典格式、字符串等
-            - 融合后的结果会将score和rank信息保存在Document的metadata中
+            - 输入只会是Document对象
+            - 融合后的结果只返回排序好的Document对象
         """
         top_k = kwargs.get('top_k', 10)
         
@@ -65,43 +65,12 @@ class MultiPathRetriever(BaseRetriever):
                 # 转换为RetrievalResult格式
                 formatted_results = []
                 for i, doc in enumerate(documents):
-                    if isinstance(doc, Document):
-                        # 如果是Document对象
-                        retrieval_result = RetrievalResult(
-                            document=doc,
-                            score=getattr(doc, 'score', 1.0),
-                            rank=i + 1
-                        )
-                    elif isinstance(doc, dict):
-                        # 如果返回的是字典格式，需要转换为Document对象
-                        content = doc.get('content', '')
-                        metadata = doc.get('metadata', {})
-                        doc_id = doc.get('id')
-                        
-                        document = Document(
-                            content=content,
-                            metadata=metadata,
-                            id=doc_id
-                        )
-                        
-                        retrieval_result = RetrievalResult(
-                            document=document,
-                            score=doc.get('score', 1.0),
-                            rank=i + 1
-                        )
-                    else:
-                        # 如果是字符串或其他格式，转换为Document对象
-                        document = Document(
-                            content=str(doc),
-                            metadata={},
-                            id=None
-                        )
-                        
-                        retrieval_result = RetrievalResult(
-                            document=document,
-                            score=1.0,
-                            rank=i + 1
-                        )
+                    # 输入只会是Document对象
+                    retrieval_result = RetrievalResult(
+                        document=doc,
+                        score=getattr(doc, 'score', 1.0),
+                        rank=i + 1
+                    )
                     formatted_results.append(retrieval_result)
                 
                 all_results.append(formatted_results)
@@ -116,16 +85,10 @@ class MultiPathRetriever(BaseRetriever):
         
         fused_results = self.fusion_method.fuse(all_results, top_k)
         
-        # 转换回Document格式
+        # 转换回Document格式，只返回排序好的Document对象
         documents = []
         for result in fused_results:
-            doc = result.document
-            # 将score和rank添加到metadata中以便保留
-            if doc.metadata is None:
-                doc.metadata = {}
-            doc.metadata['score'] = result.score
-            doc.metadata['rank'] = result.rank
-            documents.append(doc)
+            documents.append(result.document)
         
         return documents
 
