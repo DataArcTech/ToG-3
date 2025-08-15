@@ -61,11 +61,69 @@ class LLMBase(ABC):
         流式对话生成
         """
         pass
-    
+
     @abstractmethod
     def embed(self, texts: Union[str, List[str]]) -> Union[List[float], List[List[float]]]:
         """
         文本嵌入生成
+        
+        Args:
+            texts: 单个文本或文本列表
+            
+        Returns:
+            嵌入向量或嵌入向量列表
+        """
+        pass
+
+
+    @abstractmethod
+    async def astream_chat(
+        self,
+        messages: List[Dict[str, str]], 
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        **kwargs
+    ):
+        """
+        异步流式对话生成
+        
+        Args:
+            messages: 对话消息列表，格式如[{"role": "user", "content": "问题"}]
+            max_tokens: 最大生成token数
+            temperature: 生成温度参数
+            **kwargs: 其他生成参数
+            
+        Yields:
+            生成的文本片段
+        """
+        pass
+
+
+    @abstractmethod
+    async def achat(
+        self, 
+        messages: List[Dict[str, str]], 
+        max_tokens: Optional[int] = None, 
+        temperature: Optional[float] = None, 
+        **kwargs) -> str:
+        """
+        异步对话式生成
+        
+        Args:
+            messages: 对话消息列表，格式如[{"role": "user", "content": "问题"}]
+            max_tokens: 最大生成token数
+            temperature: 生成温度参数
+            **kwargs: 其他生成参数
+            
+        Returns:
+            生成的回复文本
+        """
+        pass
+
+    @abstractmethod
+    async def aembed(self, texts: Union[str, List[str]]) -> Union[List[float], List[List[float]]]:
+        """
+        异步文本嵌入生成
         
         Args:
             texts: 单个文本或文本列表
