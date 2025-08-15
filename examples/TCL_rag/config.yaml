@@ -1,12 +1,12 @@
 llm:
   name: openai
-  base_url: "https://api.gptsapi.net/v1"
-  api_key: "sk-2T06b7c7f9c3870049fbf8fada596b0f8ef908d1e233KLY2"
+  base_url: "xxx"
+  api_key: "xxx"
   model: "gpt-4.1-mini"
 
 embedding:
   name: huggingface
-  model_name: "/finance_ML/dataarc_syn_database/model/Qwen/qwen_embedding_0.6B"
+  model_name: "xxx"
   model_kwargs:
     device: "cuda:0"
 
@@ -14,20 +14,20 @@ embedding:
 
 store:
   name: faiss
-  folder_path: /data/FinAi_Mapping_Knowledge/chenmingzhen/test_faiss_store
+  folder_path: xxx
 
 
 bm25:
   name: bm25
   k: 10
-  data_path: /data/FinAi_Mapping_Knowledge/chenmingzhen/tog3_backend/TCL/syn_table_data/data_all_clearn_short_chunk_with_caption_desc.json
+  data_path: xxx
 
 retriever:
   name: vectorstore
 
 reranker:
   name: qwen3
-  model_name_or_path: "/finance_ML/dataarc_syn_database/model/Qwen/qwen_reranker_0.6B"
+  model_name_or_path: "xxx"
   device_id: "cuda:0"
 
 dataset:

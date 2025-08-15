@@ -24,9 +24,8 @@ if __name__ == "__main__":
                 vector_store_config=vector_store_config,
                 bm25_retriever_config=bm25_retriever_config)
 
-    result = rag.invoke("毛细管设计规范按照什么标准",k=20)
+    result = rag.invoke("模块机传感器端子不防呆的改善方案是什么？由哪个部门负责？",k=20)
 
-    answer = rag.answer("毛细管设计规范按照什么标准",result)
-
-
-    print(answer)
+    for i in result:
+        print(i)
+        print("-"*100)
