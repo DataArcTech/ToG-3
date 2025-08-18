@@ -30,5 +30,6 @@ flash-attn==2.7.4.post1
 accelerate
 dashscope
 torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
+vllm==0.9.1
 
 mineru[core]
