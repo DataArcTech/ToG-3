@@ -13,3 +13,22 @@ aioboto3
 llama-index
 llama-index-core
 peewee
+
+
+rank_bm25
+faiss_gpu
+
+
+# for ocr
+PyMuPDF
+qwen_vl_utils
+transformers==4.51.3
+huggingface_hub
+modelscope
+flash-attn==2.8.0.post2
+# for GLIBC 2.31, please use flash-attn==2.7.4.post1 instead of flash-attn==2.8.0.post2
+accelerate
+dashscope
+torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
+
+mineru[core]

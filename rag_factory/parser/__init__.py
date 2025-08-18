@@ -1,4 +1,3 @@
-from .Parser_Docling import DoclingParser
-from .Parser_MinerU import MineruParser
+from Parser_MinerU import MinerUPdfParser
 
-__all__ = ["DoclingParser", "MineruParser"]
+__all__ = ["MinerUPdfParser"]
