@@ -30,6 +30,14 @@ class OpenAILLM(LLMBase):
             timeout=timeout
         )
 
+        self.async_client = openai.AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            organization=organization,
+            max_retries=max_retries,
+            timeout=timeout
+        )
+
         self.default_max_tokens = max_tokens
         self.default_temperature = temperature
 
@@ -180,7 +188,7 @@ class OpenAILLM(LLMBase):
         self._validate_messages(messages)
 
         try:
-            response = await self.client.chat.completions.create(
+            response = await self.async_client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
                 max_tokens=max_tokens or self.default_max_tokens,
@@ -211,7 +219,7 @@ class OpenAILLM(LLMBase):
             if return_token_count:
                 params["stream_options"] = {"include_usage": True}
 
-            stream = await self.client.chat.completions.create(
+            stream = await self.async_client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
                 max_tokens=max_tokens or self.default_max_tokens,
@@ -248,7 +256,7 @@ class OpenAILLM(LLMBase):
             batch_size = 100
             for i in range(0, len(text_list), batch_size):
                 batch = text_list[i:i+batch_size]
-                response = await self.client.embeddings.create(
+                response = await self.async_client.embeddings.create(
                     model=self.model_name,
                     input=batch
                 )
