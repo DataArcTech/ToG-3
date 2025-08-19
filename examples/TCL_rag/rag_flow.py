@@ -1,18 +1,9 @@
-import sys
-import os
-
-# 添加 RAG-Factory 目录到 Python 路径
-rag_factory_path = os.path.join(os.path.dirname(__file__), "..", "..")
-sys.path.insert(0, rag_factory_path)
-
-from rag_factory.llms import LLMRegistry
-from rag_factory.Embed import EmbeddingRegistry
-from rag_factory.Store import VectorStoreRegistry
-from rag_factory.Retrieval import RetrieverRegistry
-from rag_factory.rerankers import RerankerRegistry
-from rag_factory.Retrieval import Document
 from typing import List
 import json
+
+from rag_factory.registry import EmbeddingRegistry, LLMRegistry, VectorStoreRegistry, RetrieverRegistry, RerankerRegistry
+from rag_factory.data_model import Document
+
 
 
 class TCL_RAG:
@@ -26,18 +17,17 @@ class TCL_RAG:
         retriever_config=None,
         reranker_config=None,
     ):
-        llm_config = llm_config or {}
-        embedding_config = embedding_config or {}
-        vector_store_config = vector_store_config or {}
-        bm25_retriever_config = bm25_retriever_config or {}
-        retriever_config = retriever_config or {}
-        reranker_config = reranker_config or {}
         self.llm = LLMRegistry.create(**llm_config)
         self.embedding = EmbeddingRegistry.create(**embedding_config)
-        self.vector_store = VectorStoreRegistry.load(**vector_store_config, embedding=self.embedding)
-        self.bm25_retriever = RetrieverRegistry.create(**bm25_retriever_config)
-        self.bm25_retriever = self.bm25_retriever.from_documents(documents=self._load_data(bm25_retriever_config["data_path"]), preprocess_func=self.chinese_preprocessing_func, k=bm25_retriever_config["k"])
+        self.vector_store = VectorStoreRegistry.create(**vector_store_config, embedding=self.embedding)
 
+        documents = self._load_data(bm25_retriever_config["data_path"])
+        self.bm25_retriever = RetrieverRegistry.create(
+            "bm25",
+            documents=documents,
+            preprocess_func=self.chinese_preprocessing_func,
+            k=bm25_retriever_config["k"]
+        )
         self.retriever = RetrieverRegistry.create(**retriever_config, vectorstore=self.vector_store)
         self.multi_path_retriever = RetrieverRegistry.create("multipath", retrievers=[self.bm25_retriever, self.retriever])
         self.reranker = RerankerRegistry.create(**reranker_config)

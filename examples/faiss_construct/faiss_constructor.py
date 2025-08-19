@@ -5,10 +5,9 @@ import os
 rag_factory_path = os.path.join(os.path.dirname(__file__), "..", "..")
 sys.path.insert(0, rag_factory_path)
 
-from rag_factory.Store import VectorStoreRegistry
-from rag_factory.Embed import EmbeddingRegistry
+from rag_factory.registry import VectorStoreRegistry, EmbeddingRegistry
 import yaml
-from rag_factory.Retrieval import Document
+from rag_factory.data_model import Document
 import json
 
 
