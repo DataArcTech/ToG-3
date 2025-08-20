@@ -1,8 +1,9 @@
 from typing import List, Dict, Any, Optional, Union
 
-from rag_factory.data_model import Document
+from rag_factory.data_model import Document, RetrievalResult
 from .base import BaseRetriever
-from rag_factory.utils.fusion import FusionMethod, RRFusion, RetrievalResult
+from rag_factory.retrieval.fusion.base import FusionBase
+from rag_factory.retrieval.fusion.rrf import RRFusion
 
 
 class MultiPathRetriever(BaseRetriever):
@@ -14,20 +15,20 @@ class MultiPathRetriever(BaseRetriever):
     
     Attributes:
         retrievers (List[BaseRetriever]): 检索器列表，每个检索器需要实现retrieve方法
-        fusion_method (FusionMethod): 融合方法，用于合并多个检索器的结果
+        fusion_method (FusionBase): 融合方法，用于合并多个检索器的结果
         top_k_per_retriever (int): 每个检索器返回的结果数量
     """
     
     def __init__(self, 
                  retrievers: List[BaseRetriever],
-                 fusion_method: Optional[FusionMethod] = None,
+                 fusion_method: Optional[FusionBase] = None,
                  top_k_per_retriever: int = 50):
         """
         初始化多路检索器
         
         Args:
             retrievers (List[BaseRetriever]): 检索器列表，每个检索器需要实现retrieve方法
-            fusion_method (Optional[FusionMethod]): 融合方法，默认为RRF (Reciprocal Rank Fusion)
+            fusion_method (Optional[FusionBase]): 融合方法，默认为RRF (Reciprocal Rank Fusion)
             top_k_per_retriever (int): 每个检索器返回的结果数量，默认为50
         """
         self.retrievers = retrievers
@@ -117,11 +118,11 @@ class MultiPathRetriever(BaseRetriever):
                 self.retrievers.pop(i)
                 break
     
-    def set_fusion_method(self, fusion_method: FusionMethod):
+    def set_fusion_method(self, fusion_method: FusionBase):
         """
         设置融合方法
         
         Args:
-            fusion_method (FusionMethod): 新的融合方法实例
+            fusion_base (FusionBase): 新的融合方法实例
         """
         self.fusion_method = fusion_method

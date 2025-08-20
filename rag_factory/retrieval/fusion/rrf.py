@@ -1,38 +1,10 @@
 from typing import List
-from dataclasses import dataclass
-from abc import ABC, abstractmethod
 from collections import defaultdict
 
-from rag_factory.data_model.document import Document
+from rag_factory.retrieval.fusion.base import FusionBase
+from rag_factory.data_model import RetrievalResult
 
-
-@dataclass
-class RetrievalResult:
-    """检索结果的数据类"""
-    document: Document
-    score: float
-    rank: int = 0
-
-
-class FusionMethod(ABC):
-    """融合方法的抽象基类"""
-    
-    @abstractmethod
-    def fuse(self, results: List[List[RetrievalResult]], top_k: int) -> List[RetrievalResult]:
-        """
-        融合多个检索器的结果
-        
-        Args:
-            results: 每个检索器的结果列表
-            top_k: 返回的最终结果数量
-            
-        Returns:
-            融合后的结果列表
-        """
-        pass
-
-
-class RRFusion(FusionMethod):
+class RRFusion(FusionBase):
     """Reciprocal Rank Fusion (RRF) 方法"""
     
     def __init__(self, k: float = 60.0):
