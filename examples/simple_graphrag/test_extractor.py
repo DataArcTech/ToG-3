@@ -19,35 +19,19 @@ from rag_factory.Embed import HuggingFaceEmbeddings
 
 
 
-# llm = OpenAILLM(
-#     model_name="gpt-5-mini",
-#     api_key="sk-2T06b7c7f9c3870049fbf8fada596b0f8ef908d1e233KLY2",
-#     base_url="https://api.gptsapi.net/v1",
-# )
+llm = OpenAILLM(
+    model_name="gpt-5-mini",
+    api_key="xxx",
+    base_url="xxx",
+)
 
-# extractor = GraphExtractor(
-#     llm=llm,
-#     extract_prompt=KG_TRIPLES_PROMPT,
-#     parse_fn=parse_extraction_result,
-# )
+extractor = GraphExtractor(
+    llm=llm,
+    extract_prompt=KG_TRIPLES_PROMPT,
+    parse_fn=parse_extraction_result,
+)
 
-
-# input_text = "基本概念 容斥原理指把包含于某内容中的所有对象的数目先计算出来,然后再把计数时重复计算的数目排斥出去,使得计算的结果既无遗漏又无重复。"
-
-
-# # result = extractor.acall([Document(content=input_text)])
-# chunk_id = f"chunk_{hash(input_text)}"
-# result = extractor(documents=[Document(content=input_text, metadata={"chunk_id": chunk_id})])
-
-# print(result)
-
-
-
-
-import asyncio
-
-async def test_upsert_entity():
-    storage = Neo4jGraphStore(
+storage = Neo4jGraphStore(
         url="bolt://localhost:7680",
         username="neo4j",
         password="12345678",
@@ -58,46 +42,61 @@ async def test_upsert_entity():
         )
     )
 
-    # entity = EntityNode(
-    #     label="实体",
-    #     name="实体",
-    #     metadatas={
-    #         "entity_description": ["实体描述", "实体描述2"],
-    #         "source_chunk_id": ["111", "222"],
-    #     }
-    # )
+async def graph_construction(documents: list[Document]):
+    """
+    图构建函数：调用extractor抽取实体和关系，并存储到图数据库
+    """
+    # 调用extractor进行实体和关系抽取
+    result = await extractor.acall(documents)
+    
+    # 打印抽取结果
+    print(f"成功处理 {len(result)} 个文档")
+    
+    for i, doc in enumerate(result):
+        entities = doc.metadata.get("entities", [])
+        relations = doc.metadata.get("relations", [])
+        
+        print(f"\n文档 {i+1}:")
+        print(f"  抽取到 {len(entities)} 个实体")
+        print(f"  抽取到 {len(relations)} 个关系")
+        
+        # 显示抽取的实体
+        if entities:
+            print("  实体列表:")
+            for entity in entities:
+                print(f"    - {entity.name} ({entity.label})")
+        
+        # 显示抽取的关系
+        if relations:
+            print("  关系列表:")
+            for relation in relations:
+                print(f"    - {relation.head_id} --{relation.label}--> {relation.tail_id}")
+        
+        # 存储到图数据库
+        for entity in entities:
+            await storage.upsert_entity(entity)
+        for relation in relations:
+            await storage.upsert_relation(relation)
+        await storage.upsert_document(doc)
 
-    # await storage.upsert_entity(entity)
-    # await storage.merge_node()
-    # await storage.vectorize_existing_nodes()
-    results = await storage.search("容斥原理", k=3, search_type="query")
-    # for r in results:
-    #     print("实体:", r["node"]["name"], "score:", r["score"])
-    #     for rel in r["relations"]:
-    #         print("  --", rel["relation_type"], "->", rel["neighbor"]["name"])
-    for r in results:
-        chunk_preview = r['chunk']['content'][:50].replace("\n", " ")  # 只显示前50字符
-        print(f"Chunk: {chunk_preview}..., 相似度: {r['score']:.4f}")
-        for entity in r['entities']:
-            print(f"  实体: {entity['node']['name']}")
-            for rel in entity['relations']:
-                neighbor_name = rel['neighbor'].get('name', rel['neighbor'].get('content', '未知'))
-                print(f"    -- 关系: {rel['relation_type']} -> {neighbor_name}")
-
-# 运行异步函数
-asyncio.run(test_upsert_entity())
+    await storage.merge_node()
+    await storage.vectorize_existing_nodes()
+    
+    print("\n图构建完成！")
 
 
-# import asyncio
+if __name__ == "__main__":
+    import asyncio
 
-# async def main():
-#     doc = result[0] if isinstance(result, list) else result
-#     for entity in doc.metadata.get("entities", []):
-#         await storage.upsert_entity(entity)
+    with open("/data/FinAi_Mapping_Knowledge/chenmingzhen/RAG-Factory/examples/simple_graphrag/申论的规矩_上册.json", "r", encoding="utf-8") as f:
+        data = json.load(f)
+    documents = []
+    for item in data:
+        if item["type"] == "knowledge":
+            content = item["content"]
+            # metadata = item["metadata"]
+            metadata = {"file_name": item["file_name"]}
+            metadata["chunk_id"] = f"chunk_{hash(content)}"
+            documents.append(Document(content=content, metadata=metadata))
 
-#     for relation in doc.metadata.get("relations", []):
-#         await storage.upsert_relation(relation)
-
-#     await storage.upsert_document(doc)
-
-# asyncio.run(main())
+    asyncio.run(graph_construction(documents))
