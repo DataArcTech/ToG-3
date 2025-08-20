@@ -696,148 +696,6 @@ class Neo4jGraphStore():
             print(f"补充 embedding 时发生错误: {str(e)}")
             raise
 
-    
-    # async def search(self, query: str, k: int = 5, search_type: str = "query") -> List[Dict[str, Any]]:
-    #     """
-    #     向量检索功能：
-    #     - search_type = "entity" 时，输入为实体名，返回最相似的实体
-    #     - search_type = "query" 时，输入为自然语言，返回最相似的 text_chunk
-
-    #     Args:
-    #         query (str): 实体名 或 自然语言 query
-    #         k (int): 返回的数量
-    #         search_type (str): "entity" 或 "query"
-
-    #     Returns:
-    #         List[Dict]: 检索结果（节点属性 + 相似度）
-    #     """
-    #     try:
-    #         # 1. 生成查询向量
-    #         query_embedding = await self.embedding.aembed_query(query)
-
-    #         async with self._driver.session() as session:
-    #             if search_type == "entity":
-    #                 # 实体检索（排除 text_chunk）
-    #                 cypher = """
-    #                 MATCH (n)
-    #                 WHERE NOT 'text_chunk' IN labels(n) AND n.embedding IS NOT NULL
-    #                 WITH n, gds.similarity.cosine(n.embedding, $query_embedding) AS score
-    #                 ORDER BY score DESC
-    #                 LIMIT $k
-    #                 RETURN n AS node, score
-    #                 """
-    #             else:
-    #                 # query 检索 text_chunk
-    #                 cypher = """
-    #                 MATCH (n:text_chunk)
-    #                 WHERE n.embedding IS NOT NULL
-    #                 WITH n, gds.similarity.cosine(n.embedding, $query_embedding) AS score
-    #                 ORDER BY score DESC
-    #                 LIMIT $k
-    #                 RETURN n AS node, score
-    #                 """
-
-    #             result = await session.run(cypher, query_embedding=query_embedding, k=k)
-    #             records = await result.data()
-
-    #             # 格式化输出
-    #             results = []
-    #             for record in records:
-    #                 node = record["node"]
-    #                 score = record["score"]
-    #                 results.append({"node": node, "score": score})
-
-    #             return results
-
-    #     except Exception as e:
-    #         print(f"检索时发生错误: {str(e)}")
-    #         raise
-
-
-
-    # async def search(self, query: str, k: int = 5, search_type: str = "query") -> List[Dict[str, Any]]:
-    #     """
-    #     向量检索功能：
-    #     - search_type = "entity" 时，输入为实体名，返回最相似的实体及其关系
-    #     - search_type = "query" 时，输入为自然语言，返回最相似的 text_chunk
-
-    #     Args:
-    #         query (str): 实体名 或 自然语言 query
-    #         k (int): 返回的数量
-    #         search_type (str): "entity" 或 "query"
-
-    #     Returns:
-    #         List[Dict]: 检索结果（节点属性 + 相似度 + 可选关系）
-    #     """
-    #     try:
-    #         query_embedding = await self.embedding.aembed_query(query)
-
-    #         async with self._driver.session() as session:
-    #             if search_type == "entity":
-    #                 # 1. 找到相似实体
-    #                 cypher_entity = """
-    #                 MATCH (n)
-    #                 WHERE NOT 'text_chunk' IN labels(n) AND n.embedding IS NOT NULL
-    #                 WITH n, gds.similarity.cosine(n.embedding, $query_embedding) AS score
-    #                 ORDER BY score DESC
-    #                 LIMIT $k
-    #                 RETURN n AS node, score
-    #                 """
-    #                 result = await session.run(cypher_entity, query_embedding=query_embedding, k=k)
-    #                 records = await result.data()
-
-    #                 results = []
-    #                 for record in records:
-    #                     node = record["node"]
-    #                     score = record["score"]
-
-    #                     # 2. 查询实体的关系（入边 + 出边）
-    #                     cypher_rel = """
-    #                     MATCH (n {name: $name})-[r]-(m)
-    #                     RETURN type(r) AS rel_type, properties(r) AS rel_props, m AS neighbor
-    #                     """
-    #                     rel_result = await session.run(cypher_rel, name=node["name"])
-    #                     rel_records = await rel_result.data()
-
-    #                     relations = []
-    #                     for rel in rel_records:
-    #                         relations.append({
-    #                             "relation_type": rel["rel_type"],
-    #                             "relation_properties": rel["rel_props"],
-    #                             "neighbor": rel["neighbor"],
-    #                         })
-
-    #                     results.append({
-    #                         "node": node,
-    #                         "score": score,
-    #                         "relations": relations
-    #                     })
-    #                 return results
-
-    #             else:
-    #                 # query 检索 text_chunk
-    #                 cypher_chunk = """
-    #                 MATCH (n:text_chunk)
-    #                 WHERE n.embedding IS NOT NULL
-    #                 WITH n, gds.similarity.cosine(n.embedding, $query_embedding) AS score
-    #                 ORDER BY score DESC
-    #                 LIMIT $k
-    #                 RETURN n AS node, score
-    #                 """
-    #                 result = await session.run(cypher_chunk, query_embedding=query_embedding, k=k)
-    #                 records = await result.data()
-
-    #                 results = []
-    #                 for record in records:
-    #                     results.append({
-    #                         "node": record["node"],
-    #                         "score": record["score"]
-    #                     })
-    #                 return results
-
-    #     except Exception as e:
-    #         print(f"检索时发生错误: {str(e)}")
-    #         raise
 
     async def search(self, query: str, k: int = 5, search_type: str = "query") -> List[Dict[str, Any]]:
         query_embedding = await self.embedding.aembed_query(query)
@@ -860,6 +718,10 @@ class Neo4jGraphStore():
                 for record in records:
                     node = record["node"]
                     score = record["score"]
+                    
+                    # 移除 embedding 字段
+                    if 'embedding' in node:
+                        del node['embedding']
 
                     cypher_rel = """
                     MATCH (n {name: $name})-[r]-(m)
@@ -868,7 +730,13 @@ class Neo4jGraphStore():
                     rel_result = await session.run(cypher_rel, name=node["name"])
                     rel_records = await rel_result.data()
 
-                    relations = [{"relation_type": r["rel_type"], "relation_properties": r["rel_props"], "neighbor": r["neighbor"]} for r in rel_records]
+                    relations = []
+                    for r in rel_records:
+                        neighbor = r["neighbor"]
+                        # 移除邻居节点的 embedding 字段
+                        if 'embedding' in neighbor:
+                            del neighbor['embedding']
+                        relations.append({"relation_type": r["rel_type"], "relation_properties": r["rel_props"], "neighbor": neighbor})
 
                     results.append({"node": node, "score": score, "relations": relations})
                 return results
@@ -890,6 +758,10 @@ class Neo4jGraphStore():
                 for record in records:
                     chunk_node = record["node"]
                     score = record["score"]
+                    
+                    # 移除 embedding 字段
+                    if 'embedding' in chunk_node:
+                        del chunk_node['embedding']
 
                     # 查询该 chunk 包含的实体
                     cypher_entities = """
@@ -902,6 +774,10 @@ class Neo4jGraphStore():
                     entities = []
                     for er in entity_records:
                         entity_node = er["entity"]
+                        # 移除实体节点的 embedding 字段
+                        if 'embedding' in entity_node:
+                            del entity_node['embedding']
+                            
                         # 查询实体关系
                         cypher_rel = """
                         MATCH (n {name: $name})-[r]-(m)
@@ -909,7 +785,14 @@ class Neo4jGraphStore():
                         """
                         rel_result = await session.run(cypher_rel, name=entity_node["name"])
                         rel_records = await rel_result.data()
-                        relations = [{"relation_type": r["rel_type"], "relation_properties": r["rel_props"], "neighbor": r["neighbor"]} for r in rel_records]
+                        
+                        relations = []
+                        for r in rel_records:
+                            neighbor = r["neighbor"]
+                            # 移除邻居节点的 embedding 字段
+                            if 'embedding' in neighbor:
+                                del neighbor['embedding']
+                            relations.append({"relation_type": r["rel_type"], "relation_properties": r["rel_props"], "neighbor": neighbor})
 
                         entities.append({"node": entity_node, "relations": relations})
 
