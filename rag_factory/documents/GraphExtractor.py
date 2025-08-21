@@ -49,7 +49,7 @@ class GraphExtractor:
                 messages = [
                     {"role": "user", "content": prompt}
                 ]
-                llm_response = await self.llm.achat(messages)
+                llm_response = await self.llm.achat(messages, response_format={"type": "json_object"})
                 if self.parse_fn is None:
                     print("错误：parse_fn为None！")
                     entities, relationships = [], []

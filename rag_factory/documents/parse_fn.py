@@ -28,3 +28,21 @@ def parse_extraction_result(llm_response: str):
     except Exception as e:
         print(f"parse_extraction_result 解析失败: {e}")
         return [], []
+
+def parse_entity_extraction_result(llm_response: str):
+    """
+    解析LLM的响应，返回实体列表
+    """
+    try:
+        data = json.loads(llm_response)
+        entities = []
+        for e in data.get("entity_list", []):
+            entities.append((
+                e.get("entity_text", ""),
+                e.get("entity_type", ""),
+                e.get("entity_description", "")
+            ))
+        return entities, []
+    except Exception as e:
+        print(f"parse_entity_extraction_result 解析失败: {e}")
+        return [], []
