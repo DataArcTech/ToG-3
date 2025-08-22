@@ -1,108 +1,8 @@
-# import sys
-# import os
-# import json
-
-# # 添加 RAG-Factory 目录到 Python 路径
-# rag_factory_path = os.path.join(os.path.dirname(__file__), "..", "..")
-# sys.path.insert(0, rag_factory_path)
-
-
-# from rag_factory.documents.GraphExtractor import GraphExtractor
-# from rag_factory.documents.Prompt import KG_TRIPLES_PROMPT, ENTITY_EXTRACT_PROMPT
-# from rag_factory.documents.schema import Document
-# from rag_factory.llms import OpenAILLM
-# from rag_factory.Store.GraphStore.graphrag_neo4j import Neo4jGraphStore
-# from rag_factory.documents.parse_fn import parse_extraction_result, parse_entity_extraction_result
-# from rag_factory.Store.GraphStore.GraphNode import EntityNode
-# from rag_factory.Embed import HuggingFaceEmbeddings
-
-# llm = OpenAILLM(
-#     model_name="gpt-5-mini",
-#     api_key="sk-2T06b7c7f9c3870049fbf8fada596b0f8ef908d1e233KLY2",
-#     base_url="https://api.gptsapi.net/v1",
-# )
-
-# storage = Neo4jGraphStore(
-#         url="bolt://localhost:7680",
-#         username="neo4j",
-#         password="12345678",
-#         database="neo4j",
-#         embedding=HuggingFaceEmbeddings(
-#             model_name="/finance_ML/dataarc_syn_database/model/Qwen/qwen_embedding_0.6B",
-#             model_kwargs={'device': 'cuda:0'}
-#         )
-#     )
-
-# extractor = GraphExtractor(
-#     llm=llm,
-#     extract_prompt=ENTITY_EXTRACT_PROMPT,
-#     parse_fn=parse_entity_extraction_result,
-# )
-
-# async def query_kg(query: str, k: int = 1, search_type: str = "query"):
-#     result = await storage.search(query, k=k, search_type=search_type)
-#     return result
-
-# if __name__ == "__main__":
-#     import asyncio
-#     input_query = "2024年上半年，文化企业实现营业收入64961亿元，比上年同期增长7.5%，则现期是（ ），现期量为（ ）亿元；基期是（ ），基期量为（ ）亿元。"
-
-#     entities = asyncio.run(extractor.acall([Document(content=input_query, metadata={"file_name": "input_query", "chunk_id": "1"})]))
-#     # print(entities)
-#     entities_list = []
-#     for entity in entities[0].metadata['entities']:
-#         entities_list.append(entity.name)
-#     print(entities_list)
-#     for entity in entities_list:
-#         result = asyncio.run(query_kg(entity, k=3, search_type="entity"))
-#         # print(result)
-#         # doc_list = []
-#         # for res in result:
-#         #     doc_list.append(res['chunk'])
-#         # print(doc_list)
-#         for res in result:
-#             print(f"节点: {res['node']}")
-#             print(f"相似度得分: {res['score']}")
-#             print("关系:")
-#             for rel in res["relations"]:
-#                 print(f"head: -> {rel['relation_type']} -> {rel['neighbor']['name']}, description: {rel['relation_properties']['relationship_description']}")
-#             print("-------------------")
-#     # result = asyncio.run(query_kg("【例1】** 2024年7月份，全国工业生产者出厂价格同比下降0.8%，环比下降0.2%，则2024年7月份，全国工业生产者出厂价格与（ ）相比下降了0.8%，与（ ）相比下降了0.2%。"))
-#     # print("=== chunk 检索结果 ===")
-#     # for res in result:
-#     #     print(f"Chunk: {res['chunk']}")
-#     #     print(f"相似度得分: {res['score']}")
-#     #     print("包含的实体:")
-#     #     for entity in res["entities"]:
-#     #         print(f"  实体节点: {entity['node']}")
-#     #     #     print("  关系:")
-#     #     #     for rel in entity["relations"]:
-#     #     #         print(f"    类型: {rel['relation_type']}, 属性: {rel['relation_properties']}, 邻居: {rel['neighbor']}")
-#     #     print("-------------------")
-
-
-#     # result = asyncio.run(query_kg("同比", k=3, search_type="entity"))
-#     # for res in result:
-#     #     print(f"节点: {res['node']}")
-#     #     print(f"相似度得分: {res['score']}")
-#     #     print("关系:")
-#     #     for rel in res["relations"]:
-#     #         print(f"head:同比 -> {rel['relation_type']} -> {rel['neighbor']['name']}, description: {rel['relation_properties']['relationship_description']}")
-#     #         # print(f"  类型: {rel['relation_type']}, 属性: {rel['relation_properties']}, 邻居: {rel['neighbor']}")
-#     #     print("-------------------")
-
-
-
-
-
-
-
-
-
 import sys
 import os
 import json
 import asyncio
+from traceback import print_tb
 from typing import List, Dict, Any, Optional, Set, Tuple
 import numpy as np
 
@@ -111,20 +11,18 @@ rag_factory_path = os.path.join(os.path.dirname(__file__), "..", "..")
 sys.path.insert(0, rag_factory_path)
 
 from rag_factory.documents.GraphExtractor import GraphExtractor
-from rag_factory.documents.Prompt import KG_TRIPLES_PROMPT, ENTITY_EXTRACT_PROMPT
+from rag_factory.documents.Prompt import ENTITY_EXTRACT_PROMPT
 from rag_factory.documents.schema import Document
 from rag_factory.llms import OpenAILLM
 from rag_factory.Store.GraphStore.graphrag_neo4j import Neo4jGraphStore
-from rag_factory.documents.parse_fn import parse_extraction_result, parse_entity_extraction_result
-from rag_factory.Store.GraphStore.GraphNode import EntityNode
+from rag_factory.documents.parse_fn import parse_entity_extraction_result
 from rag_factory.Embed import HuggingFaceEmbeddings
 
 class KnowledgeGraphRAG:
     def __init__(self):
-        """初始化知识图谱RAG系统"""
         self.llm = OpenAILLM(
             model_name="gpt-5-mini",
-            api_key="sk-xxxx",  # 请替换为您的API密钥
+            api_key="sk-xxxx", # 请替换为你的api key
             base_url="https://api.gptsapi.net/v1",
         )
 
@@ -144,6 +42,13 @@ class KnowledgeGraphRAG:
             extract_prompt=ENTITY_EXTRACT_PROMPT,
             parse_fn=parse_entity_extraction_result,
         )
+        
+        # ToG-2 参数
+        self.max_depth = 3  # D: 最大迭代深度
+        self.exploration_width = 3  # W: 探索宽度
+        self.context_k = 10  # K: 上下文数量
+        self.relation_threshold = 0.2  # 关系筛选阈值
+        self.decay_alpha = 0.5  # 指数衰减参数
 
     async def extract_entities(self, text: str) -> List[str]:
         """从文本中提取实体"""
@@ -162,209 +67,74 @@ class KnowledgeGraphRAG:
             print(f"实体提取出错: {e}")
             return []
 
-    async def search_entities(self, entities: List[str], k: int = 3) -> Dict[str, List[Dict]]:
-        """搜索实体相关信息"""
-        entity_results = {}
-        
-        for entity in entities:
-            try:
-                result = await self.storage.search(entity, k=k, search_type="entity")
-                entity_results[entity] = result
-            except Exception as e:
-                print(f"搜索实体 '{entity}' 时出错: {e}")
-                entity_results[entity] = []
-        
-        return entity_results
-
-    async def search_query(self, query: str, k: int = 5) -> List[Dict]:
-        """基于查询进行语义搜索"""
-        try:
-            result = await self.storage.search(query, k=k, search_type="query")
-            return result
-        except Exception as e:
-            print(f"查询搜索出错: {e}")
+    async def topic_prune(self, query: str, extracted_entities: List[str]) -> List[str]:
+        """Topic Prune: 使用LLM评估并选择与问题最相关的实体 (ToG-2)"""
+        if not extracted_entities:
             return []
-
-    def format_entity_info(self, entity: str, entity_data: List[Dict]) -> str:
-        """格式化实体信息"""
-        if not entity_data:
-            return f"实体 '{entity}': 未找到相关信息\n"
         
-        info = f"实体 '{entity}':\n"
-        for i, data in enumerate(entity_data):
-            info += f"  节点 {i+1}: {data['node']}\n"
-            info += f"  相似度: {data['score']:.4f}\n"
-            
-            if data.get('relations'):
-                info += "  关系:\n"
-                for rel in data['relations']:
-                    neighbor_name = rel['neighbor'].get('name', '未知')
-                    relation_type = rel.get('relation_type', '未知关系')
-                    description = rel.get('relation_properties', {}).get('relationship_description', '无描述')
-                    info += f"    -> {relation_type} -> {neighbor_name}: {description}\n"
-            
-            info += "\n"
+        if len(extracted_entities) <= self.exploration_width:
+            return extracted_entities
         
-        return info
-
-    def format_chunk_info(self, chunk_data: List[Dict]) -> str:
-        """格式化文档块信息"""
-        if not chunk_data:
-            return "未找到相关文档块\n"
-        
-        info = "相关文档块:\n"
-        for i, data in enumerate(chunk_data):
-            chunk_content = data.get('chunk', '无内容')
-            
-            # 处理chunk内容，确保是字符串
-            if isinstance(chunk_content, dict):
-                if 'content' in chunk_content:
-                    chunk_content = chunk_content['content']
-                elif 'text' in chunk_content:
-                    chunk_content = chunk_content['text']
-                else:
-                    chunk_content = str(chunk_content)
-            elif not isinstance(chunk_content, str):
-                chunk_content = str(chunk_content)
-            
-            info += f"  块 {i+1}: {chunk_content}\n"
-            info += f"  相似度: {data.get('score', 0):.4f}\n"
-            
-            if data.get('entities'):
-                info += "  包含实体:\n"
-                for entity in data['entities']:
-                    info += f"    - {entity.get('node', '未知实体')}\n"
-            
-            info += "\n"
-        
-        return info
-
-    def build_context(self, entity_results: Dict[str, List[Dict]], chunk_results: List[Dict]) -> str:
-        """构建上下文信息"""
-        context = "=== 知识图谱检索结果 ===\n\n"
-        
-        # 添加实体信息
-        context += "== 实体信息 ==\n"
-        for entity, data in entity_results.items():
-            context += self.format_entity_info(entity, data)
-        
-        # 添加文档块信息
-        context += "== 文档块信息 ==\n"
-        context += self.format_chunk_info(chunk_results)
-        
-        return context
-
-    async def generate_response(self, query: str, context: str) -> str:
-        """使用LLM生成回答"""
-        prompt = f"""基于以下知识图谱检索到的信息回答问题：
+        try:
+            prompt = f"""你是一个知识图谱专家。给定一个问题和从中提取的实体列表，请评估每个实体与问题的相关性并选择最相关的{self.exploration_width}个实体作为起始探索点。
 
 问题: {query}
 
-检索到的知识信息:
-{context}
+提取的实体: {', '.join(extracted_entities)}
 
-请根据检索到的信息，准确回答问题。如果信息不足以回答问题，请说明需要更多信息。
-特别注意：
-1. 对于数学计算题，请明确指出现期、基期的定义和数值
-2. 引用具体的数据和关系
-3. 保持回答的准确性和逻辑性
+请按照相关性从高到低排序，并选择最相关的{self.exploration_width}个实体。考虑以下因素：
+1. 实体是否是问题的核心概念
+2. 实体是否可能包含答案的关键信息
+3. 实体是否适合作为图遍历的起点
 
-回答:"""
+请按照以下格式输出：
+选择的实体: [实体1, 实体2, 实体3]
+理由: 简要说明选择理由"""
 
-        try:
             messages = [
-                {"role": "system", "content": "你是一个面向 **行测（行政职业能力测验）** 的 **知识问答助手**。"},
+                {"role": "system", "content": "你是一个专业的知识图谱分析专家，擅长识别与问题最相关的关键实体。"},
                 {"role": "user", "content": prompt}
             ]
-            response = await self.llm.achat(messages)
-            return response
-        except Exception as e:
-            print(f"生成回答时出错: {e}")
-            return "抱歉，无法生成回答。"
-    
-    async def check_if_answerable(self, query: str, context: str) -> Tuple[bool, str]:
-        """检查当前context是否足以回答问题"""
-        prompt = f"""判断以下知识信息是否足以回答问题：
-
-问题: {query}
-
-当前知识信息:
-{context}
-
-请分析当前信息是否充足回答该问题。如果充足，回答"YES"并给出答案；如果不充足，回答"NO"并说明缺少什么信息。
-
-格式：
-判断: YES/NO
-答案/原因: [你的回答或缺失信息说明]
-"""
-
-        try:
-            messages = [
-                {"role": "system", "content": "你是一个判断信息充足性的助手。"},
-                {"role": "user", "content": prompt}
-            ]
+            
             response = await self.llm.achat(messages)
             
-            # 解析响应
+            # 解析响应，提取选择的实体
             lines = response.strip().split('\n')
-            is_answerable = False
-            answer = ""
+            selected_entities = []
             
             for line in lines:
-                if line.startswith("判断:"):
-                    is_answerable = "YES" in line.upper()
-                elif line.startswith("答案/原因:") or line.startswith("答案:") or line.startswith("原因:"):
-                    answer = line.split(":", 1)[1].strip()
+                if line.startswith('选择的实体:'):
+                    # 提取方括号内的内容
+                    import re
+                    match = re.search(r'\[(.*?)\]', line)
+                    if match:
+                        entities_str = match.group(1)
+                        selected_entities = [e.strip() for e in entities_str.split(',')]
+                        break
             
-            return is_answerable, answer
+            # 确保选择的实体都在原始列表中
+            valid_entities = []
+            for entity in selected_entities:
+                if entity in extracted_entities:
+                    valid_entities.append(entity)
+            
+            # 如果解析失败，返回前几个实体
+            if not valid_entities:
+                valid_entities = extracted_entities[:self.exploration_width]
+            
+            print(f"Topic Prune: {len(extracted_entities)} -> {len(valid_entities)}")
+            print(f"选择的起始实体: {valid_entities}")
+            
+            return valid_entities
             
         except Exception as e:
-            print(f"判断可回答性时出错: {e}")
-            return False, "无法判断"
-    
-    async def calculate_chunk_similarity(self, query: str, chunks: List[str]) -> float:
-        """计算query和chunks的平均相似度"""
-        if not chunks:
-            return 0.0
-        
-        try:
-            # 过滤掉非字符串的chunks
-            valid_chunks = []
-            for chunk in chunks:
-                if isinstance(chunk, str) and chunk.strip():
-                    valid_chunks.append(chunk.strip())
-            
-            if not valid_chunks:
-                return 0.0
-            
-            # 获取query的embedding
-            query_embedding = await self.storage.embedding.aembed_query(query)
-            query_vec = np.array(query_embedding)
-            
-            # 计算每个chunk的相似度
-            similarities = []
-            for chunk in valid_chunks:
-                try:
-                    chunk_embedding = await self.storage.embedding.aembed_query(chunk)
-                    chunk_vec = np.array(chunk_embedding)
-                    
-                    # 计算余弦相似度
-                    similarity = np.dot(query_vec, chunk_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(chunk_vec))
-                    similarities.append(similarity)
-                except Exception as chunk_error:
-                    print(f"计算单个chunk相似度时出错: {chunk_error}")
-                    continue
-            
-            # 返回平均相似度
-            if similarities:
-                return np.mean(similarities)
-            else:
-                return 0.0
-        
-        except Exception as e:
-            print(f"计算相似度时出错: {e}")
-            return 0.0
-    
+            print(f"Topic Prune过程中出错: {e}")
+            # 出错时返回前几个实体
+            return extracted_entities[:self.exploration_width]
+
+
+
+
     async def get_entity_chunks(self, entity: str) -> List[str]:
         """获取实体相关的所有chunks"""
         try:
@@ -394,450 +164,672 @@ class KnowledgeGraphRAG:
             print(f"获取实体chunks时出错: {e}")
             return []
     
-    async def get_entity_neighbors(self, entity: str) -> List[str]:
-        """获取实体的所有邻居"""
+    async def get_entity_neighbors(self, entity: str) -> List[Dict[str, Any]]:
+        """获取实体的所有邻居，包含边的详细信息"""
         try:
             # 搜索实体
             results = await self.storage.search(entity, k=5, search_type="entity")
-            neighbors = set()
+            neighbors = []
+            seen_neighbors = set()
             
             for result in results:
                 if 'relations' in result:
                     for relation in result['relations']:
                         neighbor_name = relation.get('neighbor', {}).get('name', '')
-                        if neighbor_name and neighbor_name != entity:
-                            neighbors.add(neighbor_name)
+                        if neighbor_name and neighbor_name != entity and neighbor_name not in seen_neighbors:
+                            neighbor_info = {
+                                'name': neighbor_name,
+                                'relation_type': relation.get('relation_type', '未知关系'),
+                                'relation_description': relation.get('relation_properties', {}).get('relationship_description', '无描述'),
+                                'source_entity': entity
+                            }
+                            neighbors.append(neighbor_info)
+                            seen_neighbors.add(neighbor_name)
             
-            return list(neighbors)
+            return neighbors
         except Exception as e:
             print(f"获取实体邻居时出错: {e}")
             return []
 
-    async def beam_search_rag_query(self, query: str, max_hops: int = 3, beam_width: int = 3, entity_k: int = 3) -> Dict[str, Any]:
-        """使用beam search的RAG查询流程"""
-        print(f"处理查询: {query}\n")
+    async def relation_prune(self, query: str, entity: str, relations: List[Dict[str, Any]], 
+                           current_clues: str = "") -> List[Dict[str, Any]]:
+        """Relation Prune: 使用LLM评估并筛选最有用的关系 (ToG-2)"""
+        if not relations:
+            return []
         
-        # 1. 实体提取
-        print("1. 提取实体...")
-        initial_entities = await self.extract_entities(query)
-        print(f"提取到的实体: {initial_entities}\n")
-        
-        if not initial_entities:
-            print("未能提取到实体，使用传统搜索")
-            chunk_results = await self.search_query(query, k=5)
-            context = self.format_chunk_info(chunk_results)
-            response = await self.generate_response(query, context)
-            return {
-                "query": query,
-                "entities": [],
-                "search_path": [],
-                "context": context,
-                "response": response,
-                "hops": 0
-            }
-        
-        # 2. 初始化beam search
-        visited_entities = set()
-        search_path = []
-        
-        for hop in range(max_hops):
-            print(f"\n第 {hop + 1} 跳:")
-            
-            # 当前要探索的实体
-            current_entities = initial_entities if hop == 0 else beam_entities
-            
-            # 收集当前实体的chunks
-            all_chunks = []
-            entity_chunks_map = {}
-            
-            for entity in current_entities:
-                if entity in visited_entities:
-                    continue
-                    
-                chunks = await self.get_entity_chunks(entity)
-                entity_chunks_map[entity] = chunks
-                all_chunks.extend(chunks)
-                visited_entities.add(entity)
-            
-            # 构建context并检查是否可以回答
-            if all_chunks:
-                context = f"=== 第 {hop + 1} 跳检索结果 ===\n"
-                context += f"当前实体: {', '.join(current_entities)}\n\n"
-                for chunk in all_chunks[:5]:  # 只使用前5个最相关的chunks
-                    context += f"- {chunk}\n\n"
-                
-                # 检查是否可以回答
-                is_answerable, initial_answer = await self.check_if_answerable(query, context)
-                
-                if is_answerable:
-                    print(f"✅ 在第 {hop + 1} 跳找到答案")
-                    # 使用完整的context生成最终答案
-                    final_response = await self.generate_response(query, context)
-                    return {
-                        "query": query,
-                        "entities": initial_entities,
-                        "search_path": search_path,
-                        "context": context,
-                        "response": final_response,
-                        "hops": hop + 1,
-                        "found_answer": True
-                    }
-                else:
-                    print(f"❌ 第 {hop + 1} 跳信息不足: {initial_answer}")
-            
-            # 如果不能回答，继续beam search
-            if hop < max_hops - 1:
-                # 获取所有邻居实体
-                all_neighbors = {}
-                for entity in current_entities:
-                    neighbors = await self.get_entity_neighbors(entity)
-                    for neighbor in neighbors:
-                        if neighbor not in visited_entities:
-                            if neighbor not in all_neighbors:
-                                all_neighbors[neighbor] = []
-                            all_neighbors[neighbor].append(entity)  # 记录来源
-                
-                if not all_neighbors:
-                    print("没有更多邻居可探索")
-                    break
-                
-                # 计算每个邻居实体的相似度
-                neighbor_scores = []
-                for neighbor, sources in all_neighbors.items():
-                    # 获取邻居的chunks
-                    neighbor_chunks = await self.get_entity_chunks(neighbor)
-                    if neighbor_chunks:
-                        # 计算平均相似度
-                        similarity = await self.calculate_chunk_similarity(query, neighbor_chunks[:3])
-                        neighbor_scores.append((neighbor, similarity, sources))
-                
-                # 选择top-k个邻居作为beam
-                neighbor_scores.sort(key=lambda x: x[1], reverse=True)
-                beam_entities = [item[0] for item in neighbor_scores[:beam_width]]
-                
-                # 记录搜索路径
-                search_path.append({
-                    "hop": hop + 1,
-                    "from_entities": current_entities,
-                    "explored_neighbors": [{"entity": item[0], "score": item[1], "from": item[2]} for item in neighbor_scores[:beam_width]]
-                })
-                
-                print(f"选择的beam实体: {beam_entities}")
-        
-        # 如果达到最大跳数仍未找到答案，使用所有收集的信息生成回答
-        print(f"\n达到最大跳数 {max_hops}，使用所有收集的信息生成答案")
-        
-        # 构建最终context
-        final_context = "=== 多跳搜索结果汇总 ===\n\n"
-        for i, path_info in enumerate(search_path):
-            final_context += f"第 {i+1} 跳: {' -> '.join(path_info['from_entities'])}\n"
-            for neighbor_info in path_info['explored_neighbors']:
-                final_context += f"  - {neighbor_info['entity']} (相似度: {neighbor_info['score']:.4f})\n"
-        
-        final_context += "\n=== 收集到的相关信息 ===\n"
-        # 添加所有访问过的实体的chunks（限制数量）
-        chunk_count = 0
-        for entity in visited_entities:
-            if chunk_count >= 10:  # 限制总chunks数量
-                break
-            chunks = await self.get_entity_chunks(entity)
-            if chunks:
-                final_context += f"\n实体 '{entity}' 相关信息:\n"
-                for chunk in chunks[:2]:  # 每个实体最多2个chunks
-                    final_context += f"- {chunk}\n"
-                    chunk_count += 1
-        
-        final_response = await self.generate_response(query, final_context)
-        
-        return {
-            "query": query,
-            "entities": initial_entities,
-            "search_path": search_path,
-            "context": final_context,
-            "response": final_response,
-            "hops": max_hops,
-            "found_answer": False
-        }
-    
-    async def rag_query(self, query: str, entity_k: int = 3, chunk_k: int = 5) -> Dict[str, Any]:
-        """兼容旧接口的RAG查询"""
-        # 使用新的beam search方法
-        return await self.beam_search_rag_query(query, max_hops=3, beam_width=3, entity_k=entity_k)
-
-    def print_detailed_results(self, results: Dict[str, Any]):
-        """打印详细结果"""
-        print("=" * 80)
-        print("RAG 查询结果")
-        print("=" * 80)
-        
-        print(f"\n查询: {results['query']}")
-        print(f"\n提取的实体: {results['entities']}")
-        print(f"\n搜索跳数: {results.get('hops', 0)}")
-        print(f"是否找到答案: {'是' if results.get('found_answer', False) else '否'}")
-        
-        # 打印搜索路径
-        if 'search_path' in results and results['search_path']:
-            print("\n=== Beam Search 路径 ===")
-            for path_info in results['search_path']:
-                print(f"\n第 {path_info['hop']} 跳:")
-                print(f"  起始实体: {', '.join(path_info['from_entities'])}")
-                print("  探索的邻居:")
-                for neighbor in path_info['explored_neighbors']:
-                    print(f"    - {neighbor['entity']} (相似度: {neighbor['score']:.4f}, 来自: {', '.join(neighbor['from'])})")
-        
-        # 如果是旧格式的结果，保持兼容
-        if 'entity_results' in results:
-            print("\n=== 实体检索详情 ===")
-            for entity, data in results['entity_results'].items():
-                print(f"\n实体: {entity}")
-                if not data:
-                    print("  未找到相关信息")
-                    continue
-                    
-                for i, item in enumerate(data):
-                    print(f"  结果 {i+1}:")
-                    print(f"    节点: {item['node']}")
-                    print(f"    相似度: {item['score']:.4f}")
-                    
-                    if item.get('relations'):
-                        print("    关系:")
-                        for rel in item['relations']:
-                            neighbor_name = rel['neighbor'].get('name', '未知')
-                            relation_type = rel.get('relation_type', '未知关系')
-                            description = rel.get('relation_properties', {}).get('relationship_description', '无描述')
-                            print(f"      -> {relation_type} -> {neighbor_name}: {description}")
-        
-        # 打印context片段
-        if 'context' in results:
-            print("\n=== 使用的Context片段 ===")
-            context_lines = results['context'].split('\n')
-            for i, line in enumerate(context_lines[:20]):  # 只显示前20行
-                if line.strip():
-                    print(line)
-            if len(context_lines) > 20:
-                print(f"... (还有 {len(context_lines) - 20} 行)")
-        
-        print(f"\n=== 最终回答 ===")
-        print(results['response'])
-
-    async def batch_query(self, queries: List[str], **kwargs) -> List[Dict[str, Any]]:
-        """批量查询"""
-        results = []
-        for query in queries:
-            result = await self.rag_query(query, **kwargs)
-            results.append(result)
-        return results
-
-
-
-class AdvancedKGRAG(KnowledgeGraphRAG):
-    """扩展的知识图谱RAG系统，包含更多高级功能"""
-    
-    async def get_entity_neighborhood(self, entity: str, hops: int = 2) -> Dict[str, Any]:
-        """获取实体的多跳邻居信息"""
         try:
-            result = await self.storage.search(entity, k=10, search_type="entity")
-            
-            neighborhood = {
-                "center_entity": entity,
-                "direct_neighbors": [],
-                "relations_summary": {}
-            }
-            
-            for item in result:
-                if item.get('relations'):
-                    for rel in item['relations']:
-                        neighbor = rel['neighbor'].get('name', '未知')
-                        relation_type = rel.get('relation_type', '未知关系')
-                        
-                        neighborhood["direct_neighbors"].append({
-                            "neighbor": neighbor,
-                            "relation": relation_type,
-                            "description": rel.get('relation_properties', {}).get('relationship_description', '')
-                        })
-                        
-                        # 统计关系类型
-                        if relation_type not in neighborhood["relations_summary"]:
-                            neighborhood["relations_summary"][relation_type] = 0
-                        neighborhood["relations_summary"][relation_type] += 1
-            
-            return neighborhood
-        except Exception as e:
-            print(f"获取实体邻域信息出错: {e}")
-            return {"center_entity": entity, "direct_neighbors": [], "relations_summary": {}}
-
-    async def multi_hop_reasoning(self, query: str, max_hops: int = 2) -> Dict[str, Any]:
-        """多跳推理"""
-        print(f"开始多跳推理，最大跳数: {max_hops}")
-        
-        # 1. 初始实体提取
-        initial_entities = await self.extract_entities(query)
-        print(f"初始实体: {initial_entities}")
-        
-        all_entities = set(initial_entities)
-        hop_results = {}
-        
-        # 2. 多跳扩展
-        current_entities = initial_entities
-        for hop in range(max_hops):
-            print(f"\n第 {hop + 1} 跳:")
-            hop_entities = set()
-            
-            for entity in current_entities:
-                neighborhood = await self.get_entity_neighborhood(entity, hops=1)
-                hop_results[f"{entity}_hop_{hop}"] = neighborhood
+            # 构建关系描述
+            relation_descriptions = []
+            for i, rel in enumerate(relations):
+                rel_type = rel.get('relation_type', '未知关系')
+                rel_desc = rel.get('relation_description', '无描述')
+                neighbor_name = rel.get('name', '未知实体')
                 
-                # 收集邻居实体
-                for neighbor_info in neighborhood["direct_neighbors"]:
-                    hop_entities.add(neighbor_info["neighbor"])
+                desc = f"{i+1}. 关系: {entity} -[{rel_type}]-> {neighbor_name}"
+                if rel_desc != '无描述':
+                    desc += f" (描述: {rel_desc})"
+                relation_descriptions.append(desc)
             
-            # 更新实体集合（排除已处理的）
-            new_entities = hop_entities - all_entities
-            all_entities.update(new_entities)
-            current_entities = list(new_entities)
+            prompt = f"""你是一个知识图谱专家。给定一个问题、当前实体和它的所有邻接关系，请评估每个关系对回答问题的有用性，并给出0-10的评分（10分最有用）。
+
+问题: {query}
+当前实体: {entity}
+{"当前线索: " + current_clues if current_clues else ""}
+
+可选关系:
+{chr(10).join(relation_descriptions)}
+
+请为每个关系评分，考虑以下因素：
+1. 关系是否可能通向包含答案的实体
+2. 关系的语义是否与问题相关
+3. 邻居实体是否可能有用
+
+请按照以下格式输出（每行一个关系的评分）：
+1: [评分] - [简要理由]
+2: [评分] - [简要理由]
+...
+
+只选择评分 >= {int(self.relation_threshold * 10)} 的关系。"""
+
+            messages = [
+                {"role": "system", "content": "你是一个专业的知识图谱分析专家，擅长评估关系对问题的相关性。"},
+                {"role": "user", "content": prompt}
+            ]
             
-            print(f"  新发现实体: {len(new_entities)} 个")
+            response = await self.llm.achat(messages)
             
-            if not new_entities:
-                print(f"  第 {hop + 1} 跳未发现新实体，停止扩展")
-                break
-        
-        return {
-            "query": query,
-            "initial_entities": initial_entities,
-            "all_discovered_entities": list(all_entities),
-            "hop_results": hop_results,
-            "total_hops": hop + 1
-        }
+            # 解析响应
+            lines = response.strip().split('\n')
+            selected_relations = []
+            
+            for line in lines:
+                if ':' in line:
+                    try:
+                        # 解析 "数字: 评分 - 理由" 格式
+                        parts = line.split(':', 1)
+                        if len(parts) == 2:
+                            rel_idx = int(parts[0].strip()) - 1  # 转换为0-based索引
+                            content = parts[1].strip()
+                            
+                            # 提取评分
+                            if ' -' in content:
+                                score_part = content.split(' -')[0].strip()
+                            else:
+                                score_part = content.strip()
+                            
+                            try:
+                                score = float(score_part)
+                                
+                                # 检查评分是否达到阈值
+                                if score >= self.relation_threshold * 10 and 0 <= rel_idx < len(relations):
+                                    rel_copy = relations[rel_idx].copy()
+                                    rel_copy['llm_score'] = score
+                                    selected_relations.append(rel_copy)
+                            except ValueError:
+                                continue
+                    except (ValueError, IndexError):
+                        continue
+            
+            # 按评分排序
+            selected_relations.sort(key=lambda x: x.get('llm_score', 0), reverse=True)
+            
+            print(f"Relation Prune for '{entity}': {len(relations)} -> {len(selected_relations)}")
+            for rel in selected_relations[:3]:  # 只打印前3个
+                print(f"  - {rel['name']}: {rel['relation_type']} (LLM评分: {rel.get('llm_score', 0):.1f})")
+            
+            return selected_relations
+            
+        except Exception as e:
+            print(f"Relation Prune过程中出错: {e}")
+            import traceback
+            traceback.print_exc()
+            # 出错时返回所有关系
+            return relations
 
-    async def semantic_similarity_ranking(self, query: str, candidates: List[Dict], top_k: int = 5) -> List[Dict]:
-        """基于语义相似度对候选结果排序"""
-        sorted_candidates = sorted(candidates, key=lambda x: x.get('score', 0), reverse=True)
-        return sorted_candidates[:top_k]
+    async def retrieve_chunks_from_topic_entities(self, query: str, topic_entities: List[str], k: int = 5) -> List[Dict[str, Any]]:
+        """从topic entities关联的chunks中进行向量检索"""
+        try:
+            print(f"从{len(topic_entities)}个topic entities关联的chunks中检索...")
+            
+            # 收集所有topic entities关联的chunks
+            all_entity_chunks = []
+            entity_chunk_map = {}  # 记录chunk属于哪个entity
+            
+            for entity in topic_entities:
+                chunks = await self.get_entity_chunks(entity)
+                print(f"  实体'{entity}': 找到{len(chunks)}个chunks")
+                
+                for chunk in chunks:
+                    all_entity_chunks.append(chunk)
+                    entity_chunk_map[chunk] = entity
+            
+            if not all_entity_chunks:
+                print("❌ 未找到任何关联的chunks")
+                return []
+            
+            print(f"总共收集到{len(all_entity_chunks)}个chunks，开始向量检索...")
+            
+            # 对query进行embedding
+            query_embedding = await self.storage.embedding.aembed_query(query)
+            query_vec = np.array(query_embedding)
+            
+            # 计算每个chunk与query的相似度
+            chunk_scores = []
+            for chunk in all_entity_chunks:
+                try:
+                    chunk_embedding = await self.storage.embedding.aembed_query(chunk)
+                    chunk_vec = np.array(chunk_embedding)
+                    
+                    # 计算余弦相似度
+                    similarity = np.dot(query_vec, chunk_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(chunk_vec))
+                    
+                    chunk_scores.append({
+                        'chunk': chunk,
+                        'entity': entity_chunk_map[chunk],
+                        'similarity_score': max(0.0, similarity)
+                    })
+                except Exception as e:
+                    print(f"计算chunk相似度时出错: {e}")
+                    continue
+            
+            # 按相似度排序并返回top-k
+            chunk_scores.sort(key=lambda x: x['similarity_score'], reverse=True)
+            top_chunks = chunk_scores[:k]
+            
+            print(f"✅ 检索完成，返回top-{len(top_chunks)}个最相关的chunks")
+            for i, chunk_info in enumerate(top_chunks[:3]):  # 显示前3个
+                print(f"  {i+1}. 来自实体'{chunk_info['entity']}' (相似度: {chunk_info['similarity_score']:.4f})")
+                print(f"     {chunk_info['chunk'][:100]}...")
+            
+            return top_chunks
+            
+        except Exception as e:
+            print(f"从topic entities检索chunks时出错: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
-    async def enhanced_rag_query(self, query: str, entity_k: int = 3, chunk_k: int = 5, 
-                                enable_multi_hop: bool = True, max_hops: int = 3, beam_width: int = 3) -> Dict[str, Any]:
-        """增强的RAG查询，使用beam search"""
-        print(f"开始增强RAG查询: {query}\n")
+    async def entity_guided_context_retrieval(self, query: str, candidate_entity: str, 
+                                             triple_path: List[Tuple[str, str]], k: int = None) -> List[Dict[str, Any]]:
+        """Entity-guided Context Retrieval: 结合triple路径的上下文检索 (ToG-2)"""
+        if k is None:
+            k = self.context_k
         
-        # 使用新的beam search方法
-        result = await self.beam_search_rag_query(query, max_hops=max_hops, beam_width=beam_width, entity_k=entity_k)
-        
-        # 如果启用了额外的多跳分析
-        if enable_multi_hop and result['entities'] and not result.get('found_answer', False):
-            print("\n执行额外的多跳分析...")
-            multi_hop_result = await self.multi_hop_reasoning(query, max_hops)
-            result['multi_hop_analysis'] = multi_hop_result
-        
-        return result
+        try:
+            # 构建triple路径的文本描述
+            path_description = ""
+            if triple_path:
+                path_parts = []
+                for source_entity, relation in triple_path:
+                    path_parts.append(f"{source_entity} -[{relation}]->")
+                path_parts.append(candidate_entity)
+                path_description = " ".join(path_parts)
+            
+            # 获取候选实体相关的文档chunks
+            entity_chunks = await self.get_entity_chunks(candidate_entity)
+            
+            if not entity_chunks:
+                return []
+            
+            # 为每个chunk计算增强的相关性分数
+            enhanced_chunks = []
+            for chunk in entity_chunks:
+                try:
+                    # 如果有路径描述，将其附加到chunk后面来计算相似度
+                    if path_description:
+                        enhanced_text = f"{path_description}: {chunk}"
+                    else:
+                        enhanced_text = chunk
+                    
+                    # 计算query与增强文本的相似度
+                    query_embedding = await self.storage.embedding.aembed_query(query)
+                    enhanced_embedding = await self.storage.embedding.aembed_query(enhanced_text)
+                    
+                    query_vec = np.array(query_embedding)
+                    enhanced_vec = np.array(enhanced_embedding)
+                    
+                    # 计算余弦相似度
+                    similarity = np.dot(query_vec, enhanced_vec) / (np.linalg.norm(query_vec) * np.linalg.norm(enhanced_vec))
+                    
+                    enhanced_chunks.append({
+                        'chunk': chunk,
+                        'entity': candidate_entity,
+                        'triple_path': triple_path,
+                        'path_description': path_description,
+                        'similarity_score': max(0.0, similarity)
+                    })
+                    
+                except Exception as e:
+                    print(f"计算chunk相似度时出错: {e}")
+                    # 如果出错，给一个默认分数
+                    enhanced_chunks.append({
+                        'chunk': chunk,
+                        'entity': candidate_entity,
+                        'triple_path': triple_path,
+                        'path_description': path_description,
+                        'similarity_score': 0.0
+                    })
+            
+            # 按相似度排序并返回top-k
+            enhanced_chunks.sort(key=lambda x: x['similarity_score'], reverse=True)
+            top_chunks = enhanced_chunks[:k]
+            
+            print(f"Entity-guided Context Retrieval for '{candidate_entity}': {len(enhanced_chunks)} -> {len(top_chunks)}")
+            if top_chunks:
+                print(f"  最高分数: {top_chunks[0]['similarity_score']:.4f}")
+            
+            return top_chunks
+            
+        except Exception as e:
+            print(f"Entity-guided Context Retrieval过程中出错: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
-def create_rag_prompts():
-    """创建RAG相关的提示词模板"""
-    prompts = {
-        "answer_prompt": """基于以下知识图谱检索到的信息回答问题：
+    async def context_based_entity_prune(self, query: str, candidate_entities: List[Dict[str, Any]], 
+                                       triple_paths: Dict[str, List[Tuple[str, str]]]) -> List[Dict[str, Any]]:
+        """Context-based Entity Prune: 基于上下文质量评分候选实体 (ToG-2)"""
+        try:
+            scored_entities = []
+            
+            for entity_info in candidate_entities:
+                entity_name = entity_info['name']
+                triple_path = triple_paths.get(entity_name, [])
+                
+                # 获取实体的上下文
+                contexts = await self.entity_guided_context_retrieval(query, entity_name, triple_path, k=5)
+                
+                if not contexts:
+                    entity_info['context_score'] = 0.0
+                    scored_entities.append(entity_info)
+                    continue
+                
+                # 使用指数衰减加权计算总分
+                total_score = 0.0
+                for i, ctx in enumerate(contexts):
+                    weight = np.exp(-self.decay_alpha * i)  # 指数衰减权重
+                    total_score += ctx['similarity_score'] * weight
+                
+                entity_info['context_score'] = total_score
+                entity_info['top_contexts'] = contexts[:3]  # 保存前3个最佳上下文
+                scored_entities.append(entity_info)
+            
+            # 按上下文分数排序
+            scored_entities.sort(key=lambda x: x['context_score'], reverse=True)
+            
+            # 选择top-W个实体
+            top_entities = scored_entities[:self.exploration_width]
+            
+            print(f"Context-based Entity Prune: {len(candidate_entities)} -> {len(top_entities)}")
+            for entity in top_entities:
+                print(f"  - {entity['name']}: 上下文分数 {entity['context_score']:.4f}")
+            
+            return top_entities
+            
+        except Exception as e:
+            print(f"Context-based Entity Prune过程中出错: {e}")
+            import traceback
+            traceback.print_exc()
+            # 出错时返回原始列表的前W个
+            return candidate_entities[:self.exploration_width]
+
+    async def hybrid_knowledge_reasoning(self, query: str, previous_clues: str, triple_paths: List[List[Tuple[str, str]]], 
+                                       top_entities: List[Dict[str, Any]], contexts: List[Dict[str, Any]]) -> Tuple[bool, str]:
+        """混合知识推理: 基于图谱路径和上下文进行推理判断 (ToG-2)"""
+        try:
+            # 构建知识描述
+            knowledge_parts = []
+            
+            # 1. 上一轮线索
+            if previous_clues:
+                knowledge_parts.append(f"前轮线索: {previous_clues}")
+            
+            # 2. Triple路径信息
+            if triple_paths:
+                path_descriptions = []
+                for i, path in enumerate(triple_paths[:3]):  # 只显示前3条路径
+                    if path:
+                        path_str = ""
+                        for source, relation in path:
+                            path_str += f"{source} -[{relation}]-> "
+                        path_str = path_str.rstrip(" -> ")
+                        path_descriptions.append(f"路径{i+1}: {path_str}")
+                
+                if path_descriptions:
+                    knowledge_parts.append("图谱路径信息:\n" + "\n".join(path_descriptions))
+            
+            # 3. Top实体及其上下文
+            if top_entities:
+                entity_contexts = []
+                for entity in top_entities:
+                    entity_name = entity['name']
+                    entity_contexts.append(f"实体: {entity_name} (上下文分数: {entity.get('context_score', 0):.3f})")
+                    
+                    # 添加实体的上下文信息
+                    if 'top_contexts' in entity:
+                        for ctx in entity['top_contexts'][:2]:  # 每个实体最多2个上下文
+                            chunk = ctx['chunk'][:200] + "..." if len(ctx['chunk']) > 200 else ctx['chunk']
+                            entity_contexts.append(f"  - {chunk}")
+                
+                if entity_contexts:
+                    knowledge_parts.append("相关实体及上下文:\n" + "\n".join(entity_contexts))
+            
+            # 4. 额外的上下文
+            if contexts:
+                context_descriptions = []
+                for ctx in contexts[:5]:  # 最多5个上下文
+                    chunk = ctx['chunk'] if isinstance(ctx, dict) and 'chunk' in ctx else str(ctx)
+                    chunk_preview = chunk[:150] + "..." if len(chunk) > 150 else chunk
+                    score = ctx.get('similarity_score', 0) if isinstance(ctx, dict) else 0
+                    context_descriptions.append(f"- {chunk_preview} (分数: {score:.3f})")
+                
+                if context_descriptions:
+                    knowledge_parts.append("额外相关上下文:\n" + "\n".join(context_descriptions))
+            
+            # 构建推理提示
+            knowledge_summary = "\n\n".join(knowledge_parts) if knowledge_parts else "暂无相关知识"
+            
+            prompt = f"""你是一个专业的知识推理专家。基于提供的知识信息，判断是否足够回答问题，并按要求输出。
 
 问题: {query}
 
-检索到的知识信息:
-{context}
+当前知识信息:
+{knowledge_summary}
 
-请根据检索到的信息，准确回答问题。如果信息不足以回答问题，请说明需要更多信息。
-特别注意：
-1. 对于数学计算题，请明确指出现期、基期的定义和数值
-2. 引用具体的数据和关系
-3. 保持回答的准确性和逻辑性
-4. 如果涉及计算，请给出具体的计算过程
+请仔细分析以上知识，然后按照以下格式输出：
 
-回答:""",
-        
-        "entity_analysis_prompt": """分析以下实体在知识图谱中的信息：
+判断: [Yes/No]
 
-实体: {entity}
-相关信息: {entity_info}
+如果判断为Yes，请输出:
+答案: [你的完整答案，将关键实体用{{实体名}}包围]
 
-请总结该实体的关键特征、相关概念和重要关系。""",
-        
-        "multi_hop_summary_prompt": """基于多跳推理结果，总结实体间的复杂关系：
+如果判断为No，请输出:
+线索: {{总结当前有用的线索和发现，用于指导下一轮搜索}}
 
-查询: {query}
-多跳分析结果: {multi_hop_results}
-
-请总结发现的关键关系路径和推理链。"""
-    }
-    return prompts
-
-# 主函数
-async def main_advanced():
-    """高级功能演示"""
-    # 创建增强RAG系统
-    advanced_rag = AdvancedKGRAG()
-    
-    # 测试查询
-    query = """【['2022年,深圳全市绿化覆盖总面积达到101385.6公顷,比上年增长513.4公顷;其中建成区绿化覆盖面积', '41457.5公顷,比上年增长345.2公顷;建成区绿化覆盖率43.09%,比上年增长0.09个百分点;全市绿地面积', '98270.2公顷,比上年增长1.45%;其中建成区绿地面积36613.1公顷,比上年增长\n3.30%;建成区绿地率比上年增长0.98个百分点;全市公园绿地面积22219.0公顷,比上年\n增长222.5公顷,按常住人口计算人均公园绿地面积比上年增长1.13%。', '2022年全市公园已达到1260个,公园总面积38209.9公顷,分别是2003年的8.6倍和\n5.6倍;全市公园中,有自然公园37个,比上年增加4个;城市公园191个,比上年增加4\n个;社区公园1032个,比上年增加14个。三级公园体系的建成,基本实现了市民出门500\n米可达社区公园,2公里可达城市综合圈,5公里可达自然公园的目标。全市公园绿化活动场\n地服务半径覆盖的居住用地面积达到21018.2公顷,较上年增长280.8公顷,公园绿化活动场\n地服务半径覆盖率达到90.87%,与上年持平。', '2022年,全市绿道长度3119公里,比上年增长9.70%,增速较上年收窄5.78个百分点,\n万人拥有绿道长度 1.77公里,比上年增长9.94%;绿道密度(全市绿道长度与全市面积之\n比)1.56公里/平方公里,居广东省首位。深圳市建成区绿化覆盖率、公园绿化活动场地服务\n半径覆盖率、万人拥有绿道长度3项指标已达到国家生态园林城市标准。']
-下列统计指标中，其 2022 年同比增长率最高的是（）
-A.全市绿化覆盖总面积 B.全市公园绿地面积 C.全市公园总数 D.全市居住用地面积"
+注意：
+1. 只有在知识充分且能给出准确答案时才判断为Yes
+2. 线索应该简洁明了，突出对下一轮搜索有帮助的信息
+3. 实体名必须用双大括号包围
 """
-    # 执行增强RAG查询
-    result = await advanced_rag.enhanced_rag_query(
-        query, 
-        entity_k=3, 
-        chunk_k=5, 
-        enable_multi_hop=True, 
-        max_hops=2
-    )
-    
-    # 打印结果
-    advanced_rag.print_detailed_results(result)
-    
-    if result.get('multi_hop_analysis'):
-        print("\n=== 额外多跳分析结果 ===")
-        multi_hop = result['multi_hop_analysis']
-        print(f"发现总实体数: {len(multi_hop['all_discovered_entities'])}")
-        print(f"推理跳数: {multi_hop['total_hops']}")
-        print(f"初始实体: {', '.join(multi_hop['initial_entities'])}")
-        
-        # 打印实体邻域信息
-        if multi_hop.get('hop_results'):
-            print("\n实体邻域详情:")
-            for entity_hop, neighborhood in multi_hop['hop_results'].items():
-                print(f"\n  {entity_hop}:")
-                print(f"    中心实体: {neighborhood['center_entity']}")
-                print(f"    邻居数量: {len(neighborhood['direct_neighbors'])}")
-                if neighborhood['relations_summary']:
-                    print("    关系类型统计:")
-                    for rel_type, count in neighborhood['relations_summary'].items():
-                        print(f"      - {rel_type}: {count}个")
 
-async def demo_beam_search():
+            messages = [
+                {"role": "system", "content": "你是一个专业的知识推理和分析专家，擅长基于多源知识进行综合判断。"},
+                {"role": "user", "content": prompt}
+            ]
+            
+            response = await self.llm.achat(messages)
+            
+            # 解析响应
+            lines = response.strip().split('\n')
+            is_sufficient = False
+            result_content = ""
+            
+            for i, line in enumerate(lines):
+                if line.startswith('判断:'):
+                    is_sufficient = 'Yes' in line or 'yes' in line or '是' in line
+                elif line.startswith('答案:') and is_sufficient:
+                    result_content = line.split(':', 1)[1].strip()
+                    # 如果答案跨多行，继续收集
+                    for j in range(i+1, len(lines)):
+                        if lines[j].strip() and not lines[j].startswith(('线索:', '判断:')):
+                            result_content += " " + lines[j].strip()
+                        else:
+                            break
+                    break
+                elif line.startswith('线索:') and not is_sufficient:
+                    result_content = line.split(':', 1)[1].strip()
+                    # 如果线索跨多行，继续收集
+                    for j in range(i+1, len(lines)):
+                        if lines[j].strip() and not lines[j].startswith(('答案:', '判断:')):
+                            result_content += " " + lines[j].strip()
+                        else:
+                            break
+                    break
+            
+            print(f"混合知识推理结果: {'足够' if is_sufficient else '不足够'}")
+            if is_sufficient:
+                print(f"答案: {result_content[:100]}...")
+            else:
+                print(f"线索: {result_content[:100]}...")
+            
+            return is_sufficient, result_content
+            
+        except Exception as e:
+            print(f"混合知识推理过程中出错: {e}")
+            import traceback
+            traceback.print_exc()
+            return False, "推理过程出错"
+
+
+    async def tog2_multi_hop_reasoning(self, query: str) -> Dict[str, Any]: 
+        try:
+            # === 1. 初始化阶段 ===
+            print("=" * 50)
+            print("📝 初始化阶段")
+            print("=" * 50)
+            
+            # 1.1 实体提取
+            print("1.1 提取实体...")
+            extracted_entities = await self.extract_entities(query)
+            print(f"提取到的实体: {extracted_entities}")
+            
+            if not extracted_entities:
+                print("❌ 未能提取到实体，退出")
+                return {"query": query, "entities": [], "response": "无法从问题中提取到有效实体", "hops": 0}
+            
+            # 1.2 Topic Prune
+            print("\n1.2 Topic Prune...")
+            topic_entities = await self.topic_prune(query, extracted_entities)
+            
+            # 1.3 从topic entities关联的chunks中检索
+            print("\n1.3 从topic entities关联的chunks中检索...")
+            initial_contexts = await self.retrieve_chunks_from_topic_entities(
+                query, topic_entities, k=self.context_k
+            )
+            
+            # 1.4 初始推理
+            print("\n1.4 初始推理...")
+            is_sufficient, result = await self.hybrid_knowledge_reasoning(
+                query, "", [], 
+                [{"name": e, "context_score": 1.0} for e in topic_entities], 
+                initial_contexts
+            )
+            
+            if is_sufficient:
+                print("✅ 初始阶段已找到答案!")
+                return {
+                    "query": query,
+                    "entities": extracted_entities,
+                    "topic_entities": topic_entities,
+                    "response": result,
+                    "hops": 0,
+                    "found_answer": True,
+                    "reasoning_type": "initial"
+                }
+            
+            print(f"❌ 初始信息不足，进入多跳探索")
+            current_clues = result
+            
+            # === 2. 多跳探索阶段 ===
+            print("\n" + "=" * 50)
+            print("🔍 多跳探索阶段")
+            print("=" * 50)
+            
+            current_topic_entities = topic_entities
+            all_triple_paths = []
+            search_history = []
+            
+            for hop in range(1, self.max_depth + 1):
+                print(f"\n🏃‍♂️ 第 {hop} 跳探索")
+                print("-" * 30)
+                
+                print(f"当前实体: {current_topic_entities}")
+                print(f"当前线索: {current_clues[:100]}...")
+                
+                # 2.1 Relation Discovery & Prune
+                print(f"\n2.1 关系发现与筛选...")
+                all_candidate_entities = []
+                hop_triple_paths = {}
+                
+                for entity in current_topic_entities:
+                    # 获取实体的所有关系
+                    neighbors = await self.get_entity_neighbors(entity)
+                    
+                    if not neighbors:
+                        continue
+                    
+                    # Relation Prune
+                    selected_relations = await self.relation_prune(query, entity, neighbors, current_clues)
+                    
+                    # Entity Discovery
+                    for rel in selected_relations:
+                        candidate_entity = rel['name']
+                        relation_type = rel['relation_type']
+                        
+                        # 构建triple路径
+                        base_path = hop_triple_paths.get(entity, [])
+                        new_path = base_path + [(entity, relation_type)]
+                        hop_triple_paths[candidate_entity] = new_path
+                        
+                        # 添加到候选实体
+                        rel_copy = rel.copy()
+                        rel_copy['source_entity'] = entity
+                        all_candidate_entities.append(rel_copy)
+                
+                if not all_candidate_entities:
+                    print(f"❌ 第 {hop} 跳未找到候选实体，停止探索")
+                    break
+                
+                print(f"找到 {len(all_candidate_entities)} 个候选实体")
+                
+                # 2.2 Context-based Entity Prune
+                print(f"\n2.2 基于上下文的实体筛选...")
+                top_entities = await self.context_based_entity_prune(
+                    query, all_candidate_entities, hop_triple_paths
+                )
+                
+                # 收集当前跳的triple路径
+                current_paths = []
+                for entity in top_entities:
+                    path = hop_triple_paths.get(entity['name'], [])
+                    if path:
+                        current_paths.append(path)
+                
+                all_triple_paths.extend(current_paths)
+                
+                # 2.3 混合知识推理
+                print(f"\n2.3 混合知识推理...")
+                
+                # 收集所有相关上下文
+                all_contexts = []
+                for entity in top_entities:
+                    if 'top_contexts' in entity:
+                        all_contexts.extend(entity['top_contexts'])
+                
+                is_sufficient, result = await self.hybrid_knowledge_reasoning(
+                    query, current_clues, current_paths, top_entities, all_contexts
+                )
+                
+                # 记录搜索历史
+                search_history.append({
+                    "hop": hop,
+                    "topic_entities": current_topic_entities.copy(),
+                    "candidate_entities": len(all_candidate_entities),
+                    "selected_entities": [e['name'] for e in top_entities],
+                    "triple_paths": current_paths,
+                    "is_sufficient": is_sufficient,
+                    "clues": current_clues
+                })
+                
+                if is_sufficient:
+                    print(f"✅ 第 {hop} 跳找到答案!")
+                    return {
+                        "query": query,
+                        "entities": extracted_entities,
+                        "topic_entities": topic_entities,
+                        "response": result,
+                        "hops": hop,
+                        "found_answer": True,
+                        "reasoning_type": "multi_hop",
+                        "search_history": search_history,
+                        "final_entities": top_entities,
+                        "triple_paths": all_triple_paths
+                    }
+                
+                # 更新下一轮的topic entities和clues
+                current_topic_entities = [e['name'] for e in top_entities]
+                current_clues = result
+                
+                print(f"❌ 第 {hop} 跳信息仍不足够，继续下一跳")
+            
+            # === 3. 达到最大深度 ===
+            print(f"\n⏰ 达到最大深度 {self.max_depth}，生成最佳答案")
+            
+            # 使用所有收集的信息生成最终答案
+            final_contexts = []
+            final_entities = []
+            
+            for history in search_history:
+                for entity_name in history['selected_entities']:
+                    contexts = await self.entity_guided_context_retrieval(
+                        query, entity_name, [], k=2
+                    )
+                    final_contexts.extend(contexts)
+                    final_entities.append({"name": entity_name, "context_score": 1.0})
+            
+            # 最终推理
+            _, final_result = await self.hybrid_knowledge_reasoning(
+                query, current_clues, all_triple_paths, final_entities, final_contexts
+            )
+            
+            return {
+                "query": query,
+                "entities": extracted_entities,
+                "topic_entities": topic_entities,
+                "response": final_result,
+                "hops": self.max_depth,
+                "found_answer": False,
+                "reasoning_type": "exhaustive",
+                "search_history": search_history,
+                "final_entities": final_entities,
+                "triple_paths": all_triple_paths
+            }
+            
+        except Exception as e:
+            print(f"❌ ToG-2推理过程中出错: {e}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "query": query,
+                "entities": [],
+                "response": f"推理过程出错: {str(e)}",
+                "hops": 0,
+                "found_answer": False,
+                "error": str(e)
+            }
+    
+
+async def demo_tog2():
     rag = KnowledgeGraphRAG()
-    
     # 测试查询
-    test_queries = [
-        # "2024年上半年，文化企业实现营业收入64961亿元，比上年同期增长7.5%，则现期是（ ），现期量为（ ）亿元；基期是（ ），基期量为（ ）亿元。",
-#         """['2022年,深圳全市绿化覆盖总面积达到101385.6公顷,比上年增长513.4公顷;其中建成区绿化覆盖面积', '41457.5公顷,比上年增长345.2公顷;建成区绿化覆盖率43.09%,比上年增长0.09个百分点;全市绿地面积', '98270.2公顷,比上年增长1.45%;其中建成区绿地面积36613.1公顷,比上年增长\n3.30%;建成区绿地率比上年增长0.98个百分点;全市公园绿地面积22219.0公顷,比上年\n增长222.5公顷,按常住人口计算人均公园绿地面积比上年增长1.13%。', '2022年全市公园已达到1260个,公园总面积38209.9公顷,分别是2003年的8.6倍和\n5.6倍;全市公园中,有自然公园37个,比上年增加4个;城市公园191个,比上年增加4\n个;社区公园1032个,比上年增加14个。三级公园体系的建成,基本实现了市民出门500\n米可达社区公园,2公里可达城市综合圈,5公里可达自然公园的目标。全市公园绿化活动场\n地服务半径覆盖的居住用地面积达到21018.2公顷,较上年增长280.8公顷,公园绿化活动场\n地服务半径覆盖率达到90.87%,与上年持平。', '2022年,全市绿道长度3119公里,比上年增长9.70%,增速较上年收窄5.78个百分点,\n万人拥有绿道长度 1.77公里,比上年增长9.94%;绿道密度(全市绿道长度与全市面积之\n比)1.56公里/平方公里,居广东省首位。深圳市建成区绿化覆盖率、公园绿化活动场地服务\n半径覆盖率、万人拥有绿道长度3项指标已达到国家生态园林城市标准。']
-# 2022年, 深圳市建成区面积约为( )万公顷。""",
-        "同比增长率和环比增长率有什么区别？"
-    ]
+    query = "2012—2021年全国羊肉产量年度变化情况（万吨）2021年，全国羊肉产量同比增长率约为（ ）。A. 2.4%\nB. 3.4%\nC. 4.4%\nD. 5.4%"
     
-    for query in test_queries:
-        print("\n" + "="*100)
-        print(f"测试查询: {query}")
-        print("="*100)
+    
+    try:
+        # 使用ToG-2推理
+        result = await rag.tog2_multi_hop_reasoning(query)
+
+        print(f"result: {result}")
         
-        # 执行beam search
-        result = await rag.beam_search_rag_query(
-            query, 
-            max_hops=3,      # 最大跳数
-            beam_width=3,    # beam宽度
-            entity_k=3       # 每个实体返回的关系数
-        )
-        
-        # 打印结果
-        rag.print_detailed_results(result)
-        
-        print("\n" + "-"*50)
+
+    except Exception as e:
+        print(f"❌ 执行过程中出错: {e}")
+        import traceback
+        traceback.print_exc()
+
 
 
 
 if __name__ == "__main__":
-    asyncio.run(demo_beam_search())
+
+    asyncio.run(demo_tog2())
