@@ -12,23 +12,21 @@ from rag_factory.documents.Prompt import KG_TRIPLES_PROMPT
 from rag_factory.documents.schema import Document
 from rag_factory.llms import OpenAILLM
 from rag_factory.Store.GraphStore.graphrag_neo4j import Neo4jGraphStore
-from rag_factory.documents.parse_fn import parse_extraction_result
 from rag_factory.Store.GraphStore.GraphNode import EntityNode
 from rag_factory.Embed import HuggingFaceEmbeddings
-
-
+from rag_factory.documents.pydantic_schema import GraphTriples
 
 
 llm = OpenAILLM(
     model_name="gpt-5-mini",
-    api_key="xxx",
-    base_url="xxx",
+    api_key="sk-2T06b7c7f9c3870049fbf8fada596b0f8ef908d1e233KLY2",
+    base_url="https://api.gptsapi.net/v1",
 )
 
 extractor = GraphExtractor(
     llm=llm,
     extract_prompt=KG_TRIPLES_PROMPT,
-    parse_fn=parse_extraction_result,
+    response_format=GraphTriples,
 )
 
 storage = Neo4jGraphStore(
@@ -88,15 +86,25 @@ async def graph_construction(documents: list[Document]):
 if __name__ == "__main__":
     import asyncio
 
-    with open("/data/FinAi_Mapping_Knowledge/chenmingzhen/RAG-Factory/examples/simple_graphrag/申论的规矩_上册.json", "r", encoding="utf-8") as f:
-        data = json.load(f)
-    documents = []
-    for item in data:
-        if item["type"] == "knowledge":
-            content = item["content"]
-            # metadata = item["metadata"]
-            metadata = {"file_name": item["file_name"]}
-            metadata["chunk_id"] = f"chunk_{hash(content)}"
-            documents.append(Document(content=content, metadata=metadata))
+    # with open("/data/FinAi_Mapping_Knowledge/chenmingzhen/RAG-Factory/examples/simple_graphrag/2026国考公务员行测-资料部分.json", "r", encoding="utf-8") as f:
+    #     data = json.load(f)
+    # documents = []
+    # for i, item in enumerate(data):
+    #     if i == 0:
+    #         continue
+    #     content = item["content"]
+    #     # metadata = item["metadata"]
+    #     metadata = {"file_name": item["file_name"]}
+    #     metadata["chunk_id"] = f"chunk_{hash(content)}"
+    #     documents.append(Document(content=content, metadata=metadata))
 
-    asyncio.run(graph_construction(documents))
+
+    # asyncio.run(graph_construction(documents))
+
+    async def run_operations():
+        await storage.merge_node()
+        await storage.vectorize_existing_nodes()
+    
+    asyncio.run(run_operations())
+
+    print("图构建完成！")

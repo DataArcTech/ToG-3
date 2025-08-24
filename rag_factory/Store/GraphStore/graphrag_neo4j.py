@@ -6,7 +6,7 @@ import neo4j
 import logging
 from typing import List, Dict, Any, Optional    
 
-from rag_factory.Store.GraphStore.GraphNode import EntityNode, Relation, DocumentNode
+from rag_factory.Store.GraphStore.GraphNode import EntityNode, Relation, ChunkNode
 from rag_factory.documents.schema import Document
 from rag_factory.Embed import Embeddings
 
@@ -18,6 +18,12 @@ from tenacity import (
     retry_if_exception_type,
 )
 
+neo4j_retry_errors = (
+    neo4j.exceptions.ServiceUnavailable,
+    neo4j.exceptions.TransientError,
+    neo4j.exceptions.WriteServiceUnavailable,
+    neo4j.exceptions.ClientError,
+)
 
 @dataclass
 class Neo4jGraphStore():
@@ -45,16 +51,7 @@ class Neo4jGraphStore():
         if self._driver:
             await self._driver.close()
 
-    @retry(stop=stop_after_attempt(3),wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(
-            (
-                neo4j.exceptions.ServiceUnavailable,
-                neo4j.exceptions.TransientError,
-                neo4j.exceptions.WriteServiceUnavailable,
-                neo4j.exceptions.ClientError,
-            )
-        ),
-    )
+    @retry(stop=stop_after_attempt(3),wait=wait_exponential(multiplier=1, min=4, max=10),retry=retry_if_exception_type(neo4j_retry_errors))
     async def upsert_entity(self, entity: EntityNode):
         """
         Upsert a node in the Neo4j database.
@@ -84,17 +81,7 @@ class Neo4jGraphStore():
             raise
 
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(
-            (
-                neo4j.exceptions.ServiceUnavailable,
-                neo4j.exceptions.TransientError,
-                neo4j.exceptions.WriteServiceUnavailable,
-            )
-        ),
-    )
+    @retry(stop=stop_after_attempt(3),wait=wait_exponential(multiplier=1, min=4, max=10),retry=retry_if_exception_type(neo4j_retry_errors))
     async def upsert_relation(
         self, relation: Relation
     ):
@@ -130,17 +117,8 @@ class Neo4jGraphStore():
 
 
 
-    @retry(stop=stop_after_attempt(3),wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(
-            (
-                neo4j.exceptions.ServiceUnavailable,
-                neo4j.exceptions.TransientError,
-                neo4j.exceptions.WriteServiceUnavailable,
-                neo4j.exceptions.ClientError,
-            )
-        ),
-    )
-    async def upsert_node(self, doc_node: DocumentNode):
+    @retry(stop=stop_after_attempt(3),wait=wait_exponential(multiplier=1, min=4, max=10),retry=retry_if_exception_type(neo4j_retry_errors))
+    async def upsert_node(self, doc_node: ChunkNode):
         """
         Upsert a document chunk node in the Neo4j database.
 
@@ -148,7 +126,7 @@ class Neo4jGraphStore():
         `content` and any additional metadatas as properties.
         """
         label = doc_node.label.strip('"')
-        name = doc_node.id()
+        name = doc_node.id
         def _sanitize_metadata(meta: dict) -> dict:
             if not meta:
                 return {}
@@ -206,9 +184,10 @@ class Neo4jGraphStore():
             base_meta = (document.metadata.copy() if document.metadata else {})
             base_meta.pop('entities', None)
             base_meta.pop('relations', None)
-            chunk_node = DocumentNode(
+            chunk_node = ChunkNode(
                 content=document.content,
                 id_=chunk_id,
+                source=base_meta.get("file_name", "unknown"),
                 label="text_chunk",
                 metadatas={
                     "chunk_id": chunk_id,
@@ -373,17 +352,31 @@ class Neo4jGraphStore():
                 else:
                     merged_source_chunk_ids.add(node['source_chunk_id'])
             
-            # 收集其他元数据
+            # 收集其他元数据，确保只存储简单类型
             for key, value in node.items():
                 if key not in ['label', 'entity_description', 'source_chunk_id', 'name'] and value is not None:
-                    if key not in merged_metadata:
-                        merged_metadata[key] = value
-                    elif merged_metadata[key] != value:
-                        # 如果值不同，将其转换为列表
-                        if not isinstance(merged_metadata[key], list):
-                            merged_metadata[key] = [merged_metadata[key]]
-                        if value not in merged_metadata[key]:
-                            merged_metadata[key].append(value)
+                    # 只处理简单类型
+                    if isinstance(value, (str, int, float, bool)):
+                        if key not in merged_metadata:
+                            merged_metadata[key] = value
+                        elif merged_metadata[key] != value:
+                            # 如果值不同，将其转换为列表（但确保列表元素都是简单类型）
+                            if not isinstance(merged_metadata[key], list):
+                                merged_metadata[key] = [merged_metadata[key]]
+                            if value not in merged_metadata[key]:
+                                merged_metadata[key].append(value)
+                    elif isinstance(value, list):
+                        # 如果是列表，只保留简单类型的元素
+                        simple_values = [v for v in value if isinstance(v, (str, int, float, bool))]
+                        if simple_values:
+                            if key not in merged_metadata:
+                                merged_metadata[key] = simple_values
+                            else:
+                                if not isinstance(merged_metadata[key], list):
+                                    merged_metadata[key] = [merged_metadata[key]]
+                                for v in simple_values:
+                                    if v not in merged_metadata[key]:
+                                        merged_metadata[key].append(v)
         
         # 构建合并后的属性
         merged_properties = {
@@ -481,17 +474,31 @@ class Neo4jGraphStore():
                 else:
                     merged_source_chunk_ids.add(rel_props['source_chunk_id'])
             
-            # 收集其他元数据
+            # 收集其他元数据，确保只存储简单类型
             for key, value in rel_props.items():
                 if key not in ['relationship_description', 'source_chunk_id', 'label'] and value is not None:
-                    if key not in merged_metadata:
-                        merged_metadata[key] = value
-                    elif merged_metadata[key] != value:
-                        # 如果值不同，将其转换为列表
-                        if not isinstance(merged_metadata[key], list):
-                            merged_metadata[key] = [merged_metadata[key]]
-                        if value not in merged_metadata[key]:
-                            merged_metadata[key].append(value)
+                    # 只处理简单类型
+                    if isinstance(value, (str, int, float, bool)):
+                        if key not in merged_metadata:
+                            merged_metadata[key] = value
+                        elif merged_metadata[key] != value:
+                            # 如果值不同，将其转换为列表（但确保列表元素都是简单类型）
+                            if not isinstance(merged_metadata[key], list):
+                                merged_metadata[key] = [merged_metadata[key]]
+                            if value not in merged_metadata[key]:
+                                merged_metadata[key].append(value)
+                    elif isinstance(value, list):
+                        # 如果是列表，只保留简单类型的元素
+                        simple_values = [v for v in value if isinstance(v, (str, int, float, bool))]
+                        if simple_values:
+                            if key not in merged_metadata:
+                                merged_metadata[key] = simple_values
+                            else:
+                                if not isinstance(merged_metadata[key], list):
+                                    merged_metadata[key] = [merged_metadata[key]]
+                                for v in simple_values:
+                                    if v not in merged_metadata[key]:
+                                        merged_metadata[key].append(v)
         
         # 构建合并后的关系属性
         merged_rel_properties = {**merged_metadata}
@@ -503,18 +510,7 @@ class Neo4jGraphStore():
         
         return merged_rel_properties
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(
-            (
-                neo4j.exceptions.ServiceUnavailable,
-                neo4j.exceptions.TransientError,
-                neo4j.exceptions.WriteServiceUnavailable,
-                neo4j.exceptions.ClientError,
-            )
-        ),
-    )
+    @retry(stop=stop_after_attempt(3),wait=wait_exponential(multiplier=1, min=4, max=10),retry=retry_if_exception_type(neo4j_retry_errors))
     async def cleanup_duplicate_relations(self):
         """
         清理重复的关系：合并具有相同源节点、目标节点和关系类型的关系
@@ -625,18 +621,7 @@ class Neo4jGraphStore():
             print(f"获取统计信息时发生错误: {str(e)}")
             raise
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(
-            (
-                neo4j.exceptions.ServiceUnavailable,
-                neo4j.exceptions.TransientError,
-                neo4j.exceptions.WriteServiceUnavailable,
-                neo4j.exceptions.ClientError,
-            )
-        ),
-    )
+    @retry(stop=stop_after_attempt(3),wait=wait_exponential(multiplier=1, min=4, max=10),retry=retry_if_exception_type(neo4j_retry_errors))
     async def vectorize_existing_nodes(self, batch_size: int = 50):
         """
         遍历数据库中所有节点，对缺少 embedding 的节点进行向量化补充。
@@ -678,7 +663,7 @@ class Neo4jGraphStore():
                     # 🔹 批量向量化
                     embeddings = []
                     for text in texts:
-                        emb = await self.embedding.aembed_query(text)
+                        emb = self.embedding.embed_query(text)
                         embeddings.append(emb)
 
                     # 🔹 更新数据库
@@ -698,7 +683,7 @@ class Neo4jGraphStore():
 
 
     async def search(self, query: str, k: int = 5, search_type: str = "query") -> List[Dict[str, Any]]:
-        query_embedding = await self.embedding.aembed_query(query)
+        query_embedding = self.embedding.embed_query(query)
 
         async with self._driver.session() as session:
             if search_type == "entity":
@@ -723,8 +708,12 @@ class Neo4jGraphStore():
                     if 'embedding' in node:
                         del node['embedding']
 
+                    # cypher_rel = """
+                    # MATCH (n {name: $name})-[r]-(m)
+                    # RETURN type(r) AS rel_type, properties(r) AS rel_props, m AS neighbor
+                    # """
                     cypher_rel = """
-                    MATCH (n {name: $name})-[r]-(m)
+                    MATCH (n {name: $name})-[r]->(m)
                     RETURN type(r) AS rel_type, properties(r) AS rel_props, m AS neighbor
                     """
                     rel_result = await session.run(cypher_rel, name=node["name"])

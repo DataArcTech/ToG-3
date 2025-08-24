@@ -39,7 +39,7 @@ class GraphRAGConstructor(TransformComponent):
 
     llm: LLM
     extract_prompt: PromptTemplate
-    parse_fn: Callable
+    response_format: Any
     num_workers: int
     max_paths_per_chunk: int
     llm_response_cache: LlmResponseCache
@@ -48,7 +48,7 @@ class GraphRAGConstructor(TransformComponent):
         self,
         llm: Optional[LLM] = None,
         extract_prompt: Optional[Union[str, PromptTemplate]] = None,
-        parse_fn: Callable = lambda x: ([], []),
+        response_format: Any = None,
         max_paths_per_chunk: int = 10,
         num_workers: int = 4,
         dataset_name: str = "graph_rag_store",
@@ -62,7 +62,7 @@ class GraphRAGConstructor(TransformComponent):
         super().__init__(
             llm=llm or Settings.llm,
             extract_prompt=extract_prompt or DEFAULT_KG_TRIPLET_EXTRACT_PROMPT,
-            parse_fn=parse_fn,
+            response_format=response_format,
             num_workers=num_workers,
             max_paths_per_chunk=max_paths_per_chunk,
             llm_response_cache=LlmResponseCache(

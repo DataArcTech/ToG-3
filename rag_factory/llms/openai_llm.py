@@ -89,6 +89,15 @@ class OpenAILLM(LLMBase):
             self.logger.error(f"对话生成失败: {str(e)}")
             raise
 
+    def parse_chat(self, messages: List[Dict[str, str]], response_format: Any, **kwargs):
+        response = self.client.chat.completions.parse(
+            model=self.model_name,
+            messages=messages,
+            response_format=response_format,
+            **kwargs
+        )
+        return response.choices[0].message.parsed
+
     def stream_chat(
         self,
         messages: List[Dict[str, str]], 
@@ -267,3 +276,12 @@ class OpenAILLM(LLMBase):
         except Exception as e:
             self.logger.error(f"异步嵌入生成失败: {str(e)}")
             raise
+
+    async def aparse_chat(self, messages: List[Dict[str, str]], response_format: Any, **kwargs):
+        response = await self.async_client.chat.completions.parse(
+            model=self.model_name,
+            messages=messages,
+            response_format=response_format,
+            **kwargs
+        )
+        return response.choices[0].message.parsed

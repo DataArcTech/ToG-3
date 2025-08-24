@@ -17,6 +17,7 @@ peewee
 
 rank_bm25
 faiss_gpu
+scikit-learn
 
 
 # for ocr

@@ -15,14 +15,14 @@ from rag_factory.documents.Prompt import ENTITY_EXTRACT_PROMPT
 from rag_factory.documents.schema import Document
 from rag_factory.llms import OpenAILLM
 from rag_factory.Store.GraphStore.graphrag_neo4j import Neo4jGraphStore
-from rag_factory.documents.parse_fn import parse_entity_extraction_result
+from rag_factory.documents.pydantic_schema import GraphTriples
 from rag_factory.Embed import HuggingFaceEmbeddings
 
 class KnowledgeGraphRAG:
     def __init__(self):
         self.llm = OpenAILLM(
             model_name="gpt-5-mini",
-            api_key="sk-xxxx", # 请替换为你的api key
+            api_key="sk-2T06b7c7f9c3870049fbf8fada596b0f8ef908d1e233KLY2", # 请替换为你的api key
             base_url="https://api.gptsapi.net/v1",
         )
 
@@ -40,7 +40,7 @@ class KnowledgeGraphRAG:
         self.extractor = GraphExtractor(
             llm=self.llm,
             extract_prompt=ENTITY_EXTRACT_PROMPT,
-            parse_fn=parse_entity_extraction_result,
+            response_format=GraphTriples,
         )
         
         # ToG-2 参数
