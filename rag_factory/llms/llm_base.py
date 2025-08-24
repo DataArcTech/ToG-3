@@ -63,6 +63,13 @@ class LLMBase(ABC):
         pass
 
     @abstractmethod
+    def parse_chat(self, messages: List[Dict[str, str]], response_format: Any, **kwargs):
+        """
+        解析对话生成，生成指定pydantic模型
+        """
+        pass
+
+    @abstractmethod
     def embed(self, texts: Union[str, List[str]]) -> Union[List[float], List[List[float]]]:
         """
         文本嵌入生成
@@ -117,6 +124,13 @@ class LLMBase(ABC):
             
         Returns:
             生成的回复文本
+        """
+        pass
+
+    @abstractmethod
+    async def aparse_chat(self, messages: List[Dict[str, str]], response_format: Any, **kwargs):
+        """
+        异步解析对话生成，生成指定pydantic模型
         """
         pass
 
