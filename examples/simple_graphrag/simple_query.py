@@ -22,7 +22,7 @@ class KnowledgeGraphRAG:
     def __init__(self):
         self.llm = OpenAILLM(
             model_name="gpt-5-mini",
-            api_key="sk-2T06b7c7f9c3870049fbf8fada596b0f8ef908d1e233KLY2", # 请替换为你的api key
+            api_key="xxx", # 请替换为你的api key
             base_url="https://api.gptsapi.net/v1",
         )
 
