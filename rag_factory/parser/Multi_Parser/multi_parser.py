@@ -9,7 +9,7 @@ import glob
 from pathlib import Path
 from urllib.parse import urlparse
 from tqdm import tqdm
-import logging
+
 
 def main():
     arg = argparse.ArgumentParser(
