@@ -15,7 +15,7 @@ pip install -r requirements.txt
 ```
 # model download
 from huggingface_hub import snapshot_download
-snapshot_download(repo_id="rednote-hilab/dots.ocr", local_dir="Parser_Dotsocr/weights/DotsOCR", local_dir_use_symlinks=False, resume_download=True)
+snapshot_download(repo_id="rednote-hilab/dots.ocr", local_dir="./weights/DotsOCR", local_dir_use_symlinks=False, resume_download=True)
 
 or
 
@@ -34,7 +34,7 @@ python vllm_launch.py --model_path weights/DotsOCR
 ## 3. Document Parse
 
 ```
-python parser.py pdf_path.pdf 
+python pdf_parser.py pdf_path.pdf 
 ```
 
 If you want to parse document with transformers，add `--use_hf=True`
