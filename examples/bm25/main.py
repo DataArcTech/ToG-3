@@ -30,7 +30,6 @@ if __name__ == "__main__":
     with open("/data/FinAi_Mapping_Knowledge/chenmingzhen/RAG-Factory/examples/bm25/config.yaml", "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    bm25_retriever = RetrieverRegistry.create(**config["retriever"])
-    bm25_retriever = bm25_retriever.from_documents(documents=docs, preprocess_func=chinese_preprocessing_func, k=config["retriever"]["k"])
+    bm25_retriever = RetrieverRegistry.create("bm25", documents=docs, preprocess_func=chinese_preprocessing_func, k=config["retriever"]["k"])
 
     print(bm25_retriever.invoke("什么是TCL？"))
