@@ -2,6 +2,7 @@
 Run multi_parser.py to parse (pdf, docx, excel, ppt, html, image) files. 
 ```
 python multi_parser.py --input_path  --output_path  --parse_type
+# Choose one or more parse types from [pdf, docx, excel, ppt, html, image] or "all". (use ',' to connect each type)
 ```
 
 
