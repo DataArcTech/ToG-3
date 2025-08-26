@@ -9,7 +9,7 @@ from openpyxl import Workbook, load_workbook
 
 class ExcelParser:
 
-    def _dataframe_to_workbook(df):
+    def _dataframe_to_workbook(self, df):
         wb = Workbook()
         ws = wb.active
         ws.title = "Data"
