@@ -211,37 +211,6 @@ class TextSpliter:
     
 
 
-if __name__ == "__main__":
-    md_file = '/home/yangcehao/edu_project/dots_ocr_result/parsed/2026国考公务员行测-资料部分_markdown.md'
-    layout_file = '/home/yangcehao/edu_project/dots_ocr_result/parsed/2026国考公务员行测-资料部分_layout.json'
-    with open(layout_file, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-
-    spliter = CustomerSpliter()
-    metadata = spliter.split_text(data)
-    
-    with open('/home/yangcehao/RAG-Factory/rag_factory/parser/text.json', 'w', encoding='utf-8') as f:
-        json.dump(metadata, f, ensure_ascii=False, indent=4)
-
-    # def add_newlines_before_options(text):
-    #     """
-    #     在 A. B. C. D. 前添加换行符
-    #     """
-    #     # 匹配 A. B. C. D. （可能前面有空格）
-    #     pattern = r'(?<!\n)([ABCD]\.)'
-    #     result = re.sub(pattern, r'\n\1', text)
-    #     return result
-
-    # file = '/home/yangcehao/edu_project/dots_ocr_result/new_chunked/v2/2026国考公务员行测-资料部分.json'
-    # with open(file, 'r', encoding='utf-8') as f:
-    #     data = json.load(f)
-    
-    # for row in data:
-    #     text = row['content']
-    #     text = add_newlines_before_options(text)
-    #     row['content'] = text
-    #     row['metadata']['text'] = text
-
     # with open('/home/yangcehao/RAG-Factory/rag_factory/parser/text1.json', 'w', encoding='utf-8') as f:
     #      json.dump(data, f, ensure_ascii=False, indent=4)
     
