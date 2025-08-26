@@ -1,3 +1,10 @@
+# Multi-type parser
+Run multi_parser.py to parse (pdf, docx, excel, ppt, html, image) files. 
+```
+python multi_parser.py --input_path  --output_path  --parse_type
+```
+
+
 # dots.ocr parser
 
 This parser is based on the [dots.ocr](https://github.com/rednote-hilab/dots.ocr) model. See [dots.ocr](https://github.com/rednote-hilab/dots.ocr) for details.
