@@ -117,7 +117,8 @@ class EventGraphRetriever:
                  similarity_threshold: float = DEFAULT_SIMILARITY_THRESHOLD,
                  enable_fallback: bool = True,
                  chunk_event_balance: float = 0.5,
-                 convergence_tolerance: float = DEFAULT_CONVERGENCE_TOLERANCE):
+                 convergence_tolerance: float = DEFAULT_CONVERGENCE_TOLERANCE,
+                 query_analysis_prompt: str = None):
         """
         初始化检索系统
         
@@ -139,7 +140,7 @@ class EventGraphRetriever:
         self.enable_fallback = enable_fallback
         self.chunk_event_balance = chunk_event_balance
         self.convergence_tolerance = convergence_tolerance
-        
+        self.query_analysis_prompt = query_analysis_prompt
         # 数据缓存
         self._reset_cache()
         
@@ -288,31 +289,18 @@ class EventGraphRetriever:
         """构建有向图邻接表"""
         logger.info("  🔗 构建有向图邻接表...")
         
-        # 定义有向关系
-        # directed_relations = [
-        #     # 实体参与事件（单向：实体 -> 事件）
-        #     ("MATCH (e:Entity)-[:PARTICIPATES_IN]->(v:Event) RETURN e.id_ as src, v.id_ as dst", True),
-        #     # chunk包含事件（单向：chunk -> 事件）  
-        #     ("MATCH (c:Chunk)-[:CONTAINS]->(e:Event) RETURN c.id_ as src, e.id_ as dst", True),
-        #     # chunk提及实体（单向：chunk -> 实体）
-        #     ("MATCH (c:Chunk)-[:MENTIONS]->(e:Entity) RETURN c.id_ as src, e.id_ as dst", True),
-        #     # 实体间关系（双向）
-        #     ("MATCH (a:Entity)-[:ENTITY_RELATION]->(b:Entity) RETURN a.id_ as src, b.id_ as dst", False),
-        #     # 事件间关系（双向）
-        #     ("MATCH (a:Event)-[:EVENT_RELATION]->(b:Event) RETURN a.id_ as src, b.id_ as dst", False),
-        # ]
 
         directed_relations = [
-            # 实体参与事件（单向：实体 -> 事件）
+            # 实体参与事件（单向：实体 -> 事件）（双向）
             ("MATCH (e:Entity)-[:PARTICIPATES_IN]->(v:Event) RETURN e.id_ as src, v.id_ as dst", False),
-            # chunk包含事件（单向：chunk -> 事件）  
+            # chunk包含事件（单向：chunk -> 事件）（双向）
             ("MATCH (c:Chunk)-[:CONTAINS]->(e:Event) RETURN c.id_ as src, e.id_ as dst", False),
-            # chunk提及实体（单向：chunk -> 实体）
+            # chunk提及实体（单向：chunk -> 实体）（双向）
             ("MATCH (c:Chunk)-[:MENTIONS]->(e:Entity) RETURN c.id_ as src, e.id_ as dst", False),
             # 实体间关系（双向）
             ("MATCH (a:Entity)-[:ENTITY_RELATION]->(b:Entity) RETURN a.id_ as src, b.id_ as dst", True),
-            # 事件间关系（双向）
-            ("MATCH (a:Event)-[:EVENT_RELATION]->(b:Event) RETURN a.id_ as src, b.id_ as dst", True),
+            # 事件间关系（单向），相似关系已经存在双向关系
+            ("MATCH (a:Event)-[:EVENT_RELATION]->(b:Event) RETURN a.id_ as src, b.id_ as dst", False),
         ]
         
         try:
@@ -421,7 +409,10 @@ class EventGraphRetriever:
         """Step 1: 查询分析与意图理解"""
         logger.info("📋 Step 1: 查询分析与意图理解")
         
-        prompt = self._build_query_analysis_prompt(query)
+        if self.query_analysis_prompt:
+            prompt = self.query_analysis_prompt
+        else:
+            prompt = self._build_query_analysis_prompt(query)
         messages = [{"role": "user", "content": prompt}]
         
         try:
@@ -506,11 +497,18 @@ class EventGraphRetriever:
     
     def _deduplicate_seed_nodes(self, seed_nodes: List[SeedNode]) -> List[SeedNode]:
         """去重种子节点，保留最高分的"""
-        seen_ids = {}
+        # 按分数降序排序
+        seed_nodes.sort(key=lambda x: x.score, reverse=True)
+        
+        # 去重，保留第一个（分数最高的）
+        seen_ids = set()
+        deduplicated_nodes = []
         for node in seed_nodes:
-            if node.id_ not in seen_ids or node.score > seen_ids[node.id_].score:
-                seen_ids[node.id_] = node
-        return list(seen_ids.values())
+            if node.id_ not in seen_ids:
+                seen_ids.add(node.id_)
+                deduplicated_nodes.append(node)
+        
+        return deduplicated_nodes
     
     
     async def _step3_personalized_pagerank(self, seed_nodes: List[SeedNode]) -> PPRResult:
@@ -1080,7 +1078,8 @@ class EventGraphRetriever:
             seed_nodes.extend(exact_matches)
             
             # 向量相似度匹配
-            if not seed_nodes and len(self.entity_embeddings) > 0:
+            # if not seed_nodes and len(self.entity_embeddings) > 0:
+            if len(self.entity_embeddings) > 0:
                 vector_matches = await self._find_vector_entity_matches(entity_name)
                 seed_nodes.extend(vector_matches)
                 
