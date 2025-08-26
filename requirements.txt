@@ -42,3 +42,7 @@ openpyxl
 chardet 
 readability-lxml 
 markdownify
+
+langchain_experimental 
+langchain_core
+sentence_transformers
