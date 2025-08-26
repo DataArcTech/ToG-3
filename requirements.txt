@@ -14,7 +14,6 @@ llama-index
 llama-index-core
 peewee
 
-mineru[core]
 rank_bm25
 faiss_gpu
 
