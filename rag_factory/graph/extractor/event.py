@@ -1,7 +1,7 @@
 from rag_factory.graph.extractor.base import GraphExtractorBase
 from rag_factory.prompts.prompt import HYPERRAG_EXTRACTION_PROMPT
 from rag_factory.data_model.schema import KnowledgeStructure, PydanticUtils
-from rag_factory.data_model import Document
+from rag_factory.data_model.document import Document
 from rag_factory.llm.base import LLMBase
 from typing import Any
 
