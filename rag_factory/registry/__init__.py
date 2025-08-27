@@ -3,7 +3,7 @@
 from .llm import LLMRegistry
 from .embeddings import EmbeddingRegistry
 from .vector_store import VectorStoreRegistry
-from .retriever import RetrieverRegistry
+from .text_retriever import RetrieverRegistry
 from .reranker import RerankerRegistry
 
 __all__ = [
