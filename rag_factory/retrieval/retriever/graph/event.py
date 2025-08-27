@@ -8,6 +8,8 @@ import logging
 from rag_factory.store.graph.event_graphrag import HyperRAGNeo4jStore
 from rag_factory.embeddings.base import Embeddings
 from rag_factory.llm.base import LLMBase
+from rag_factory.data_model.graph import GenerationResult, RetrievalContext, PPRResult, RetrievalItem, SeedNode
+
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
