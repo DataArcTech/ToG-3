@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from typing import List

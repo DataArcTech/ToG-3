@@ -1,8 +1,8 @@
 # VectorStore/registry.py
 from typing import Dict, Type, Any, Optional, List
 
-from rag_factory.store.vector_store.base import VectorStore
-from rag_factory.store.vector_store.faiss import FaissVectorStore
+from rag_factory.store.vector.base import VectorStore
+from rag_factory.store.vector.faiss import FaissVectorStore
 from rag_factory.embeddings.base import Embeddings
 
 

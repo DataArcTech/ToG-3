@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import warnings
 
-from rag_factory.data_model import Document
+from rag_factory.data_model.document import Document
 
 
 class RerankerBase(ABC):

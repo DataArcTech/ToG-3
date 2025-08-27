@@ -6,8 +6,8 @@ import neo4j
 import logging
 from typing import List, Dict, Any, Optional    
 
-from rag_factory.store.graph_store.GraphNode import EntityNode, Relation, ChunkNode
-from rag_factory.data_model import Document
+from rag_factory.store.graph.graph_node import EntityNode, Relation, ChunkNode
+from rag_factory.data_model.document import Document
 from rag_factory.embeddings.base import Embeddings
 
 

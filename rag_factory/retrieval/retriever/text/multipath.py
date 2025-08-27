@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional, Union
 
-from rag_factory.data_model import Document, RetrievalResult
+from rag_factory.data_model.document import Document
+from rag_factory.data_model.retrieval import RetrievalResult
 from .base import BaseRetriever
 from rag_factory.retrieval.fusion.base import FusionBase
 from rag_factory.retrieval.fusion.rrf import RRFusion

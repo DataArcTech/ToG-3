@@ -11,7 +11,7 @@ from datetime import datetime
 import neo4j
 
 from rag_factory.embeddings.base import Embeddings
-from rag_factory.data_model import Document
+from rag_factory.data_model.document import Document
 
 from tenacity import (
     retry,

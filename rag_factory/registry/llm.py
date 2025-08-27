@@ -1,7 +1,7 @@
 from typing import Dict, Type, Any, Optional, List
 
-from rag_factory.llms.openai import OpenAILLM
-from rag_factory.llms.base import LLMBase
+from rag_factory.llm.openai import OpenAILLM
+from rag_factory.llm.base import LLMBase
 
 import logging
 

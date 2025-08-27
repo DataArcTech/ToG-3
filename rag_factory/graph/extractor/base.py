@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from rag_factory.llms.base import LLMBase
+from rag_factory.llm.base import LLMBase
 from typing import Any
-from rag_factory.data_model import Document
+from rag_factory.data_model.document import Document
 
 
 __all__ = ["GraphExtractorBase", "GraphExtractor"]

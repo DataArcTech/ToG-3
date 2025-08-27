@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 if TYPE_CHECKING:
     from collections.abc import Collection
     from rag_factory.embeddings.base import Embeddings
-    from rag_factory.retrieval.retriever.vectorstore import VectorStoreRetriever
+    from rag_factory.retrieval.retriever.text.vectorstore import VectorStoreRetriever
 
 
 logger = logging.getLogger(__name__)

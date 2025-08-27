@@ -8,7 +8,7 @@ import uuid
 from pydantic import ConfigDict, Field, model_validator
 import numpy as np
 
-from rag_factory.retrieval.retriever.base import BaseRetriever
+from rag_factory.retrieval.retriever.text.base import BaseRetriever
 from rag_factory.data_model.document import Document
 
 logger = logging.getLogger(__name__)

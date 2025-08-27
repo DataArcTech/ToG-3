@@ -11,15 +11,16 @@ import sys
 
 rag_factory_path = os.path.join(os.path.dirname(__file__), "..", "..")
 sys.path.insert(0, rag_factory_path)
+
 import traceback
 from typing import List, Dict, Any
 from dataclasses import dataclass
 
 # 导入RAG-Factory组件
-from rag_factory.llms.openai import OpenAILLM
+from rag_factory.llm.openai import OpenAILLM
 from rag_factory.embeddings.huggingface import HuggingFaceEmbeddings
-from rag_factory.store.graph_store.event_graphrag_neo4j import HyperRAGNeo4jStore
-from rag_factory.retrieval.graph.event_graph_retriever import EventGraphRetriever
+from rag_factory.store.graph.event_graphrag import HyperRAGNeo4jStore
+from rag_factory.retrieval.retriever.graph.event import EventGraphRetriever
 
 
 @dataclass

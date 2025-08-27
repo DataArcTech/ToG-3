@@ -2,7 +2,7 @@ from typing import List
 from collections import defaultdict
 
 from rag_factory.retrieval.fusion.base import FusionBase
-from rag_factory.data_model import RetrievalResult
+from rag_factory.data_model.retrieval import RetrievalResult
 
 class RRFusion(FusionBase):
     """Reciprocal Rank Fusion (RRF) 方法"""

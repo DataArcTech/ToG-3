@@ -1,6 +1,6 @@
 from typing import List
 
-from rag_factory.retrieval.retriever.bm25 import BM25Retriever
+from rag_factory.retrieval.retriever.text.bm25 import BM25Retriever
 
 import logging
 

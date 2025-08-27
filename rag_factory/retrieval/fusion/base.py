@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 
-from rag_factory.data_model import RetrievalResult
+from rag_factory.data_model.retrieval import RetrievalResult
 
 class FusionBase(ABC):
     """融合方法的抽象基类"""

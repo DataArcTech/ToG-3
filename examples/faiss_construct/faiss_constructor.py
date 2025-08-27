@@ -7,7 +7,7 @@ sys.path.insert(0, rag_factory_path)
 
 from rag_factory.registry import VectorStoreRegistry, EmbeddingRegistry
 import yaml
-from rag_factory.data_model import Document
+from rag_factory.data_model.document import Document
 import json
 
 

@@ -1,10 +1,10 @@
 from typing import Dict, Type, List, Callable
 import logging
 
-from rag_factory.retrieval.retriever.base import BaseRetriever
-from rag_factory.retrieval.retriever.bm25 import BM25Retriever
-from rag_factory.retrieval.retriever.vectorstore import VectorStoreRetriever
-from rag_factory.retrieval.retriever.multipath import MultiPathRetriever
+from rag_factory.retrieval.retriever.text.base import BaseRetriever
+from rag_factory.retrieval.retriever.text.bm25 import BM25Retriever
+from rag_factory.retrieval.retriever.text.vectorstore import VectorStoreRetriever
+from rag_factory.retrieval.retriever.text.multipath import MultiPathRetriever
 
 logger = logging.getLogger(__name__)
 

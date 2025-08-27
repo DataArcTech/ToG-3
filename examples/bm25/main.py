@@ -5,7 +5,7 @@ rag_factory_path = os.path.join(os.path.dirname(__file__), "..", "..")
 sys.path.insert(0, rag_factory_path)
 
 import json
-from rag_factory.data_model import Document
+from rag_factory.data_model.document import Document
 from rag_factory.registry import RetrieverRegistry
 
 import yaml

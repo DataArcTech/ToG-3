@@ -2,7 +2,7 @@ from typing import List
 import json
 
 from rag_factory.registry import EmbeddingRegistry, LLMRegistry, VectorStoreRegistry, RetrieverRegistry, RerankerRegistry
-from rag_factory.data_model import Document
+from rag_factory.data_model.document import Document
 
 
 

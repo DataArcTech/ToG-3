@@ -6,9 +6,9 @@ import logging
 
 from pydantic import ConfigDict, Field, model_validator
 
-from rag_factory.retrieval.retriever.base import BaseRetriever
-from rag_factory.data_model import Document
-from rag_factory.store.vector_store.base import VectorStore
+from rag_factory.retrieval.retriever.text.base import BaseRetriever
+from rag_factory.data_model.document import Document
+from rag_factory.store.vector.base import VectorStore
 
 logger = logging.getLogger(__name__)
 

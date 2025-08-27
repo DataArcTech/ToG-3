@@ -15,13 +15,13 @@ import sys
 rag_factory_path = os.path.join(os.path.dirname(__file__), "..", "..")
 sys.path.insert(0, rag_factory_path)
 
-from rag_factory.store.graph_store.event_graphrag_neo4j import HyperRAGNeo4jStore
-from rag_factory.data_model import Document
-from rag_factory.documents.event_GraphExtractor import HyperRAGGraphExtractor
-from rag_factory.documents.Prompt import HYPERRAG_EXTRACTION_PROMPT
-from rag_factory.documents.pydantic_schema import KnowledgeStructure
+from rag_factory.store.graph.event_graphrag import HyperRAGNeo4jStore
+from rag_factory.data_model.document import Document
+from rag_factory.graph.extractor.event import HyperRAGGraphExtractor
+from rag_factory.prompts.prompt import HYPERRAG_EXTRACTION_PROMPT
+from rag_factory.data_model.schema import KnowledgeStructure
 from rag_factory.embeddings.huggingface import HuggingFaceEmbeddings
-from rag_factory.llms.openai import OpenAILLM
+from rag_factory.llm.openai import OpenAILLM
 from config_example import NEO4J_CONFIG, EMBEDDING_CONFIG, DOCUMENT_CONFIG, LOG_CONFIG
 
 # 配置日志

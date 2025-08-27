@@ -1,7 +1,7 @@
 # test_faiss_vectorstore.py
 import numpy as np
-from rag_factory.store.vector_store.faiss import FaissVectorStore
-from rag_factory.data_model import Document
+from rag_factory.store.vector.faiss import FaissVectorStore
+from rag_factory.data_model.document import Document
 from rag_factory.registry import EmbeddingRegistry, VectorStoreRegistry, RetrieverRegistry
 
 

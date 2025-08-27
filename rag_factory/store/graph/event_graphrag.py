@@ -1,10 +1,10 @@
 from typing import List, Dict, Any
 from datetime import datetime
 
-from rag_factory.store.graph_store.Base_Neo4j import GraphStoreBaseNeo4j
+from rag_factory.store.graph.base import GraphStoreBaseNeo4j
 from rag_factory.embeddings.base import Embeddings
-from rag_factory.data_model import Document
-from rag_factory.documents.pydantic_schema import PydanticUtils
+from rag_factory.data_model.document import Document
+from rag_factory.data_model.schema import PydanticUtils
 
 # TODO: 批量写入，边提取边写入...
 class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):

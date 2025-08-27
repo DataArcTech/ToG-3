@@ -1,66 +1,17 @@
 import asyncio
 import numpy as np
 from typing import List, Dict, Any, Tuple, Optional, Set, Union
-from dataclasses import dataclass, field
+
 from collections import defaultdict
 import logging
 
-from rag_factory.store.graph_store.event_graphrag_neo4j import HyperRAGNeo4jStore
+from rag_factory.store.graph.event_graphrag import HyperRAGNeo4jStore
 from rag_factory.embeddings.base import Embeddings
-from rag_factory.llms.base import LLMBase
+from rag_factory.llm.base import LLMBase
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-
-# ===== 数据模型定义 =====
-
-@dataclass
-class SeedNode:
-    """种子节点"""
-    id_: str
-    name: str
-    type: str  # 'entity' or 'event'
-    score: float
-    source: str  # 'extracted' or 'linked'
-
-
-@dataclass
-class RetrievalItem:
-    """检索项：可以是chunk或event"""
-    id_: str
-    content: str
-    type: str  # 'chunk' or 'event'
-    score: float
-    source: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class PPRResult:
-    """PageRank结果"""
-    node_scores: Dict[str, float]
-    item_scores: Dict[str, float]  # chunk和event的混合得分
-    traversal_path: List[str]
-    convergence_info: Dict[str, Any]
-
-
-@dataclass
-class RetrievalContext:
-    """检索上下文"""
-    items: List[RetrievalItem]
-    seed_nodes: List[SeedNode]
-    ppr_result: PPRResult
-
-
-@dataclass
-class GenerationResult:
-    """生成结果"""
-    answer: str
-    evidence_items: List[RetrievalItem]
-    citations: List[str]
-    confidence: float
-    retrieval_context: RetrievalContext
 
 
 class QueryPreference(BaseModel):
