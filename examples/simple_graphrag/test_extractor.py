@@ -19,7 +19,7 @@ from rag_factory.documents.pydantic_schema import GraphTriples
 
 llm = OpenAILLM(
     model_name="gpt-5-mini",
-    api_key="sk-2T06b7c7f9c3870049fbf8fada596b0f8ef908d1e233KLY2",
+    api_key="sk-xxxxxx",
     base_url="https://api.gptsapi.net/v1",
 )
 
