@@ -20,6 +20,10 @@ from tenacity import (
     retry_if_exception_type,
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 neo4j_retry_errors = (
     neo4j.exceptions.ServiceUnavailable,
     neo4j.exceptions.TransientError,
@@ -54,9 +58,9 @@ class GraphStoreBaseNeo4j(ABC):
             self._driver: neo4j.AsyncDriver = neo4j.AsyncGraphDatabase.driver(
                 url, auth=(username, password)
             )
-            print(f"✅ 成功连接到Neo4j数据库: {url}")
+            logger.info(f"✅ 成功连接到Neo4j数据库: {url}")
         except Exception as e:
-            print(f"❌ 初始化Neo4j连接失败: {e}")
+            logger.error(f"❌ 初始化Neo4j连接失败: {e}")
             raise
 
     async def close(self):
@@ -112,7 +116,7 @@ class GraphStoreBaseNeo4j(ABC):
         Returns:
             未在Neo4j中存在的文档列表
         """
-        print(f"🔍 正在检查 {len(documents)} 个chunk是否已存在...")
+        logger.info(f"🔍 正在检查 {len(documents)} 个chunk是否已存在...")
         
         # 为文档生成chunk ID
         chunk_ids = []
@@ -148,19 +152,19 @@ class GraphStoreBaseNeo4j(ABC):
             if chunk_id not in existing_chunks:
                 new_documents.append(doc)
             else:
-                print(f"  ⚠️ 跳过已存在的chunk: {chunk_id}")
+                logger.info(f"  ⚠️ 跳过已存在的chunk: {chunk_id}")
         
-        print(f"  ✅ 发现 {len(new_documents)} 个新chunk，已跳过 {len(existing_chunks)} 个重复chunk")
+        logger.info(f"  ✅ 发现 {len(new_documents)} 个新chunk，已跳过 {len(existing_chunks)} 个重复chunk")
         return new_documents
 
 # TODO 分批处理，有bug，不能自动对所有节点生成嵌入向量，而是生成一部分，然后就停止了
     async def _generate_embeddings(self):
         """自动为没有embedding的节点生成嵌入向量"""
         if not self.embedding:
-            print("⚠️ 未提供嵌入模型，跳过向量生成")
+            logger.error("⚠️ 未提供嵌入模型，跳过向量生成")
             return
             
-        print("🧠 正在自动生成缺失的嵌入向量...")
+        logger.info("🧠 正在自动生成缺失的嵌入向量...")
         
         # 先获取总数用于进度显示
         async def get_total_count(node_type, condition="embedding IS NULL"):
@@ -173,26 +177,26 @@ class GraphStoreBaseNeo4j(ABC):
         # 处理Chunks
         total_chunks = await get_total_count("Chunk")
         if total_chunks > 0:
-            print(f"  📊 发现 {total_chunks} 个chunk需要生成嵌入向量")
+            logger.info(f"  📊 发现 {total_chunks} 个chunk需要生成嵌入向量")
             await self._process_chunk_embeddings(total_chunks)
         else:
-            print("  ✅ 所有chunk已有嵌入向量")
+            logger.info("  ✅ 所有chunk已有嵌入向量")
         
         # 处理Entities  
         total_entities = await get_total_count("Entity")
         if total_entities > 0:
-            print(f"  📊 发现 {total_entities} 个实体需要生成嵌入向量")
+            logger.info(f"  📊 发现 {total_entities} 个实体需要生成嵌入向量")
             await self._process_entity_embeddings(total_entities)
         else:
-            print("  ✅ 所有实体已有嵌入向量")
+            logger.info("  ✅ 所有实体已有嵌入向量")
         
         # 处理Events
         total_events = await get_total_count("Event")
         if total_events > 0:
-            print(f"  📊 发现 {total_events} 个事件需要生成嵌入向量")
+            logger.info(f"  📊 发现 {total_events} 个事件需要生成嵌入向量")
             await self._process_event_embeddings(total_events)
         else:
-            print("  ✅ 所有事件已有嵌入向量")
+            logger.info("  ✅ 所有事件已有嵌入向量")
 
     async def _process_chunk_embeddings(self, total_count):
         """处理chunk嵌入向量生成"""
@@ -227,7 +231,7 @@ class GraphStoreBaseNeo4j(ABC):
                         chunks_to_embed.append(chunk_id)
                 
                 if chunks_to_embed:
-                    print(f"    🧠 处理chunk {processed + 1}-{processed + len(chunks_to_embed)}/{total_count}")
+                    logger.info(f"    🧠 处理chunk {processed + 1}-{processed + len(chunks_to_embed)}/{total_count}")
                     embeddings = self.embedding.embed_documents(chunk_texts)
                     
                     # 批量更新
@@ -296,7 +300,7 @@ class GraphStoreBaseNeo4j(ABC):
                     entities_to_embed.append(entity_id)
                 
                 if entities_to_embed:
-                    print(f"    🧠 处理实体 {processed + 1}-{processed + len(entities_to_embed)}/{total_count}")
+                    logger.info(f"    🧠 处理实体 {processed + 1}-{processed + len(entities_to_embed)}/{total_count}")
                     embeddings = self.embedding.embed_documents(entity_texts)
                     
                     update_query = """
@@ -345,7 +349,7 @@ class GraphStoreBaseNeo4j(ABC):
                         events_to_embed.append(event_id)
                 
                 if events_to_embed:
-                    print(f"    🧠 处理事件 {processed + 1}-{processed + len(events_to_embed)}/{total_count}")
+                    logger.info(f"    🧠 处理事件 {processed + 1}-{processed + len(events_to_embed)}/{total_count}")
                     embeddings = self.embedding.embed_documents(event_texts)
                     
                     update_query = """
@@ -381,13 +385,13 @@ class GraphStoreBaseNeo4j(ABC):
 
     async def _merge_duplicate_entities(self):
         """使用APOC合并可能重复的实体节点（可选功能）"""
-        print("🔄 正在使用APOC合并重复实体...")
+        logger.info("🔄 正在使用APOC合并重复实体...")
         
         try:
             # 检查APOC是否可用
             apoc_check_query = "RETURN apoc.version() as version"
             await self._execute_query(apoc_check_query)
-            print("  ✅ APOC插件可用，开始合并重复实体")
+            logger.info("  ✅ APOC插件可用，开始合并重复实体")
             
             # 查找同名实体并合并
             merge_query = """
@@ -408,11 +412,11 @@ class GraphStoreBaseNeo4j(ABC):
             """
             
             await self._execute_query(merge_query)
-            print("  ✅ 完成实体合并")
+            logger.info("  ✅ 完成实体合并")
             
         except Exception as e:
-            print(f"  ⚠️ APOC合并功能不可用或失败: {e}")
-            print("  💡 建议安装APOC插件以获得更好的实体合并功能")
+            logger.error(f"  ⚠️ APOC合并功能不可用或失败: {e}")
+            logger.info("  💡 建议安装APOC插件以获得更好的实体合并功能")
 
     async def get_graph_statistics(self) -> Dict[str, int]:
         """获取图统计信息"""
@@ -429,7 +433,7 @@ class GraphStoreBaseNeo4j(ABC):
                     else:
                         statistics[stat_name] = 0
             except Exception as e:
-                print(f"⚠️ 获取统计信息 {stat_name} 时出错: {e}")
+                logger.error(f"⚠️ 获取统计信息 {stat_name} 时出错: {e}")
                 statistics[stat_name] = 0
         
         return statistics
@@ -441,7 +445,7 @@ class GraphStoreBaseNeo4j(ABC):
         Args:
             delete_type: 删除类型 ("all", "entities", "events", "relations")
         """
-        print(f"🗑️ 正在删除图数据: {delete_type}")
+        logger.info(f"🗑️ 正在删除图数据: {delete_type}")
         
         delete_queries = self._get_delete_queries()
         
@@ -452,9 +456,9 @@ class GraphStoreBaseNeo4j(ABC):
         for query in queries:
             try:
                 await self._execute_query(query)
-                print(f"  ✓ 执行删除查询: {query}")
+                logger.info(f"  ✓ 执行删除查询: {query}")
             except Exception as e:
-                print(f"  ❌ 删除查询失败: {e}")
+                logger.error(f"  ❌ 删除查询失败: {e}")
 
     async def health_check(self) -> Dict[str, Any]:
         """健康检查"""
