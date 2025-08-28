@@ -22,7 +22,7 @@ class LayoutSpliter:
                 begin_pattern
                 ):
         """
-        begin_pattern: 需要将那些开头单独分割开
+        begin_pattern: 需要将哪些开头单独分割开
         eg. r'^([(（]材料|\d+[)、.]|（材料|[一二三四五六七八九十]+、|（[一二三四五六七八九十]+）|\d+、|\d+. |阅读下列材料|统计表:)'
         """
         self.begin_pattern = begin_pattern
