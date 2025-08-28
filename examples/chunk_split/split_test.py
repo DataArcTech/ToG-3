@@ -22,7 +22,7 @@ class LayoutSpliter:
                 begin_pattern = r'^([(（]材料|\d+[)、.]|（材料|[一二三四五六七八九十]+、|（[一二三四五六七八九十]+）|\d+、|\d+. |阅读下列材料|统计表:)'
                 ):
         """
-        begin_pattern: 需要将那些开头单独分割开
+        begin_pattern: 单独分割的开头格式
         """
         self.begin_pattern = begin_pattern
 
@@ -35,7 +35,7 @@ class LayoutSpliter:
     def _lv2_heading(paragraph):
         return bool(re.match(r'^第[一二三四五六七八九十零百千万]+[节]', paragraph.strip()))
     
-    def split_text_with_title(self, data) -> List:
+    def split_text_with_title(self, data, begin_pattern = None ) -> List:
         """
             对有固定一级标题，二级标题格式的数据进行分块
             输入：layout json 数据
@@ -48,6 +48,7 @@ class LayoutSpliter:
                 "text":
             }
         """
+        pattern = begin_pattern or self.begin_pattern
         title_lv1 = ''
         title_lv2 = ''
         temp_text = ''
@@ -97,7 +98,7 @@ class LayoutSpliter:
                     temp_text += f"<figure> {text} </figure>"
             else:
                 text = re.sub(r'^[#*]+\s*', '', text)
-                if re.match(r'^\s*(?:.?)?(例|【例|（例|【解析|典型真题)\s*', text.strip()) and len(temp_text)>5: 
+                if re.match(pattern, text.strip()) and len(temp_text)>5: 
                     meta_data.append({
                         "title_lv1":title_lv1,
                         "title_lv2":title_lv2,
@@ -162,7 +163,7 @@ if __name__ == "__main__":
     layout_spliter = LayoutSpliter()
     text_spliter = MarkdownHeaderTextSplitter()
 
-    layout_result = layout_spliter.split_text_with_title(layout_data)
+    layout_result = layout_spliter.split_text_with_title(layout_data, begin_pattern = r'^\s*(?:.?)?(例|【例|（例|【解析|典型真题)\s*')
 
     md_result = text_spliter.split_text(md_texts)
 
