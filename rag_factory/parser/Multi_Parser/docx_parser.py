@@ -10,6 +10,8 @@ import base64
 import pypandoc
 import tempfile
 from pdf_parser import DotsOCRParser
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 
 class DocxParser:
 
@@ -51,9 +53,6 @@ class DocxParser:
     }
 
         def iter_block_items(doc):
-            from docx.table import Table
-            from docx.text.paragraph import Paragraph
-
             parent_elm = doc.element.body
             for child in parent_elm:
                 if child.tag.endswith('tbl'):
