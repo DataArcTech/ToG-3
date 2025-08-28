@@ -150,8 +150,8 @@ class LayoutSpliter:
 
 if __name__ == "__main__":
 
-    md_file = '/home/yangcehao/RAG-Factory/examples/chunk_split/test_file/2026国考公务员行测-资料部分_markdown.md'
-    layout_file = '/home/yangcehao/RAG-Factory/examples/chunk_split/test_file/2026国考公务员行测-资料部分_img_content.json'
+    md_file = 'RAG-Factory/examples/chunk_split/test_file/2026国考公务员行测-资料部分_markdown.md'
+    layout_file = 'RAG-Factory/examples/chunk_split/test_file/2026国考公务员行测-资料部分_img_content.json'
 
 
     with open(layout_file, 'r', encoding='utf-8') as f:
