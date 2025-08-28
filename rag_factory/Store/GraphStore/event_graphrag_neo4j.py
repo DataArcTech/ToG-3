@@ -611,7 +611,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
 
             # 2. 创建事件嵌入向量的图投影
             projection_query = """
-            CALL gds.graph.drop('event_similarity', false) YIELD graphName
+            CALL gds.graph.drop('event_similarity', false)
             """
             try:
                 await self._safe_execute_only(projection_query)

@@ -157,7 +157,7 @@ class GraphStoreBaseNeo4j(ABC):
         logger.info(f"  ✅ 发现 {len(new_documents)} 个新chunk，已跳过 {len(existing_chunks)} 个重复chunk")
         return new_documents
 
-# TODO 分批处理，有bug，不能自动对所有节点生成嵌入向量，而是生成一部分，然后就停止了
+
     async def _generate_embeddings(self):
         """自动为没有embedding的节点生成嵌入向量"""
         if not self.embedding:
@@ -384,39 +384,570 @@ class GraphStoreBaseNeo4j(ABC):
                         processed += len(empty_updates)
 
     async def _merge_duplicate_entities(self):
-        """使用APOC合并可能重复的实体节点（可选功能）"""
-        logger.info("🔄 正在使用APOC合并重复实体...")
+        """使用Louvain算法基于实体名称相似度进行社区检测和合并"""
+        logger.info("🔄 正在使用Louvain算法进行实体聚类合并...")
         
         try:
-            # 检查APOC是否可用
-            apoc_check_query = "RETURN apoc.version() as version"
-            await self._execute_query(apoc_check_query)
-            logger.info("  ✅ APOC插件可用，开始合并重复实体")
+            # 1. 检查GDS库是否可用
+            if not await self._check_gds_availability():
+                logger.warning("  ⚠️ GDS库不可用，回退到基础合并方式")
+                await self._fallback_name_based_merge()
+                return
             
-            # 查找同名实体并合并
-            merge_query = """
-            CALL apoc.periodic.iterate(
-                "MATCH (e1:Entity), (e2:Entity) 
-                 WHERE e1.entity_name = e2.entity_name AND id(e1) > id(e2) 
-                 RETURN e1, e2",
-                "CALL apoc.refactor.mergeNodes([e1, e2], {
-                    properties: {
-                        entity_descriptions: 'combine',
-                        mention_texts: 'combine',
-                        source_chunks: 'combine',
-                        update_time: 'overwrite'
-                    }
-                }) YIELD node RETURN node",
-                {batchSize: 10, parallel: false}
-            )
-            """
+            # 2. 创建基于实体名称相似度的图投影
+            graph_name, index_to_node_id = await self._create_similarity_graph()
+            if not graph_name:
+                logger.warning("  ⚠️ 图投影创建失败，回退到基础合并方式")
+                await self._fallback_name_based_merge()
+                return
             
-            await self._execute_query(merge_query)
-            logger.info("  ✅ 完成实体合并")
+            # 3. 使用Louvain算法检测社区
+            clusters = await self._detect_entity_clusters(graph_name, index_to_node_id)
+            if not clusters:
+                logger.warning("  ⚠️ 聚类检测失败或无聚类结果，回退到基础合并方式")
+                await self._cleanup_resources(graph_name)
+                await self._fallback_name_based_merge()
+                return
+            
+            # 4. 合并同社区实体
+            merged_count = await self._merge_clusters(clusters)
+            
+            # 5. 清理资源
+            await self._cleanup_resources(graph_name)
+            
+            logger.info(f"  ✅ Louvain聚类合并完成，共合并 {merged_count} 个重复实体")
             
         except Exception as e:
-            logger.error(f"  ⚠️ APOC合并功能不可用或失败: {e}")
-            logger.info("  💡 建议安装APOC插件以获得更好的实体合并功能")
+            logger.error(f"  ⚠️ Louvain聚类合并失败: {e}")
+            # 添加异常详细信息
+            import traceback
+            logger.error(f"  详细错误信息: {traceback.format_exc()}")
+            
+            # 清理可能残留的资源
+            try:
+                await self._cleanup_resources("entity_similarity_graph")
+                await self._cleanup_similarity_relationships()
+            except:
+                pass
+            
+            # 回退到基础合并方式
+            await self._fallback_name_based_merge()
+
+    async def _check_gds_availability(self) -> bool:
+        """检查Graph Data Science库是否可用"""
+        try:
+            # 首先尝试直接检查GDS版本
+            check_query = "RETURN gds.version() as version"
+            async with self._driver.session(database=self.database) as session:
+                result = await session.run(check_query)
+                record = await result.single()
+                if record:
+                    version = record['version']
+                    logger.info(f"  ✅ GDS库可用，版本: {version}")
+                    
+                    # 尝试检查Neo4j版本兼容性
+                    try:
+                        # 尝试不同的系统过程名称
+                        neo4j_version_queries = [
+                            "CALL dbms.components() YIELD versions, name WHERE name = 'Neo4j Kernel' RETURN versions[0] as version",
+                            "CALL dbms.components() YIELD versions, name WHERE name = 'Neo4j Kernel' RETURN versions as version",
+                            "RETURN '5.0.0' as version"  # 默认版本
+                        ]
+                        
+                        neo4j_version = None
+                        for query in neo4j_version_queries:
+                            try:
+                                neo4j_result = await session.run(query)
+                                neo4j_record = await neo4j_result.single()
+                                if neo4j_record:
+                                    neo4j_version = neo4j_record['version']
+                                    if isinstance(neo4j_version, list):
+                                        neo4j_version = neo4j_version[0]
+                                    break
+                            except:
+                                continue
+                        
+                        if neo4j_version:
+                            logger.info(f"  ℹ️ Neo4j版本: {neo4j_version}")
+                            
+                            # 检查版本兼容性
+                            if not self._check_version_compatibility(neo4j_version, version):
+                                logger.warning(f"  ⚠️ Neo4j版本 {neo4j_version} 与GDS版本 {version} 可能不兼容")
+                                return False
+                    except Exception as e:
+                        logger.warning(f"  ⚠️ Neo4j版本检查失败: {e}")
+                    
+                    return True
+                else:
+                    logger.warning("  ⚠️ GDS库未安装或不可用")
+                    return False
+                    
+        except Exception as e:
+            logger.warning(f"  ⚠️ GDS库检查失败: {e}")
+        
+        return False
+    
+    def _check_version_compatibility(self, neo4j_version: str, gds_version: str) -> bool:
+        """检查Neo4j和GDS版本兼容性"""
+        try:
+            # 提取主版本号
+            neo4j_major = int(neo4j_version.split('.')[0])
+            gds_major = int(gds_version.split('.')[0])
+            
+            # 基本兼容性检查
+            if neo4j_major >= 5 and gds_major >= 2:
+                return True
+            elif neo4j_major >= 4 and gds_major >= 1:
+                return True
+            
+            return False
+        except:
+            # 如果版本解析失败，保守地返回False
+            return False
+
+    async def _create_similarity_graph(self) -> str:
+        """创建基于实体名称相似度的图投影"""
+        logger.info("  🔧 创建实体相似度图...")
+        
+        graph_name = "entity_similarity_graph"
+        
+        # 清理可能存在的旧图
+        await self._cleanup_resources(graph_name)
+        
+        # 获取所有实体的embedding
+        entities_query = """
+        MATCH (e:Entity)
+        WHERE e.embedding IS NOT NULL
+        RETURN elementId(e) as node_id,
+               e.entity_name as name,
+               e.embedding as embedding
+        """
+        
+        # 创建节点ID到索引的映射
+        node_id_to_index = {}
+        index_to_node_id = {}
+        
+        async with self._driver.session(database=self.database) as session:
+            result = await session.run(entities_query)
+            entities = await result.data()
+        
+        if len(entities) < 2:
+            return None
+        
+        # 计算实体间的embedding余弦相似度并创建SIMILAR关系
+        similarity_threshold = 0.95  # 相似度阈值
+        relationships_created = 0
+        
+        # 导入向量计算库
+        from sklearn.metrics.pairwise import cosine_similarity
+        import numpy as np
+        
+        # 准备embedding数据
+        embeddings = []
+        entity_map = {}
+        
+        for i, entity in enumerate(entities):
+            embedding = entity['embedding']
+            if embedding:
+                embeddings.append(embedding)
+                entity_map[i] = entity['node_id']
+                node_id_to_index[entity['node_id']] = i
+                index_to_node_id[i] = entity['node_id']
+        
+        if len(embeddings) < 2:
+            logger.info("  ℹ️ 有效embedding数量不足，跳过相似度计算")
+            return None
+        
+        # 转换为numpy数组并计算余弦相似度矩阵
+        try:
+            embeddings_array = np.array(embeddings)
+            similarity_matrix = cosine_similarity(embeddings_array)
+            
+            # 创建相似度关系
+            async with self._driver.session(database=self.database) as session:
+                for i in range(len(embeddings)):
+                    for j in range(i + 1, len(embeddings)):
+                        similarity_score = similarity_matrix[i][j]
+                        
+                        if similarity_score >= similarity_threshold:
+                            create_relation_query = """
+                            MATCH (e1:Entity), (e2:Entity)
+                            WHERE elementId(e1) = $node_id1 AND elementId(e2) = $node_id2
+                            CREATE (e1)-[:SIMILAR {similarity: $similarity}]->(e2)
+                            """
+                            
+                            await session.run(create_relation_query, {
+                                'node_id1': entity_map[i],
+                                'node_id2': entity_map[j],
+                                'similarity': float(similarity_score)
+                            })
+                            relationships_created += 1
+                            
+                            # 添加调试信息
+                            if relationships_created <= 5:  # 只显示前5个关系
+                                logger.info(f"  🔗 创建相似度关系: {entities[i]['name']} -> {entities[j]['name']} (相似度: {similarity_score:.3f})")
+            
+            logger.info(f"  ✅ 创建了 {relationships_created} 个相似度关系")
+            
+        except Exception as e:
+            logger.warning(f"  ⚠️ embedding相似度计算失败: {e}")
+            relationships_created = 0
+        
+        # 如果没有创建任何关系，说明没有相似实体
+        if relationships_created == 0:
+            logger.info("  ℹ️ 没有发现相似实体，跳过图投影创建")
+            return None
+        
+        # 创建图投影 - 使用旧版本语法
+        try:
+            create_projection_query = f"""
+            CALL gds.graph.project(
+                '{graph_name}',
+                'Entity',
+                'SIMILAR'
+            )
+            YIELD graphName, nodeCount, relationshipCount
+            RETURN graphName, nodeCount, relationshipCount
+            """
+            
+            async with self._driver.session(database=self.database) as session:
+                result = await session.run(create_projection_query)
+                records = await result.data()
+                if records:
+                    logger.info(f"  ✅ 旧版本图投影创建成功: {records[0]['nodeCount']} 个节点, {records[0]['relationshipCount']} 个关系")
+                    return graph_name, index_to_node_id
+                    
+        except Exception as e:
+            logger.error(f"  ❌ 图投影创建失败: {e}")
+            # 清理已创建的关系
+            await self._cleanup_similarity_relationships()
+            return None, {}
+        
+        return None, {}
+
+    async def _cleanup_similarity_relationships(self):
+        """清理SIMILAR关系"""
+        try:
+            cleanup_query = "MATCH ()-[r:SIMILAR]->() DELETE r"
+            async with self._driver.session(database=self.database) as session:
+                await session.run(cleanup_query)
+        except Exception as e:
+            logger.warning(f"  ⚠️ 清理SIMILAR关系失败: {e}")
+
+    async def _detect_entity_clusters(self, graph_name: str, index_to_node_id: dict = None) -> dict:
+        """使用Louvain算法检测实体聚类"""
+        if not graph_name:
+            logger.info("  ℹ️ 没有图投影，跳过聚类检测")
+            return {}
+            
+        # 使用Louvain算法检测实体聚类
+        
+        try:
+            louvain_query = f"""
+            CALL gds.louvain.stream(
+                '{graph_name}',
+                {{
+                    maxIterations: 10
+                }}
+            )
+            YIELD nodeId, communityId
+            WITH communityId, collect(nodeId) as nodeIds
+            WHERE size(nodeIds) > 1
+            RETURN communityId, nodeIds
+            ORDER BY size(nodeIds) DESC
+            """
+            
+            async with self._driver.session(database=self.database) as session:
+                result = await session.run(louvain_query)
+                louvain_records = await result.data()
+                
+        except Exception as e:
+            logger.error(f"  ❌ Louvain算法失败: {e}")
+            return {}
+        
+        # 获取聚类详情
+        clusters = {}
+        for record in louvain_records:
+            community_id = record['communityId']
+            node_ids = record['nodeIds']
+            
+            # 将图投影的索引ID转换为实际的节点ID
+            actual_node_ids = []
+            if index_to_node_id:
+                for node_id in node_ids:
+                    if node_id in index_to_node_id:
+                        actual_node_ids.append(index_to_node_id[node_id])
+            else:
+                # 如果没有映射，直接使用原始ID
+                actual_node_ids = [str(nid) for nid in node_ids]
+            
+            if not actual_node_ids:
+                continue
+            
+            # 获取实体详细信息
+            entities_query = """
+            MATCH (e:Entity)
+            WHERE elementId(e) IN $node_ids
+            RETURN elementId(e) as node_id,
+                   e.entity_name as name,
+                   coalesce(e.entity_descriptions, []) as descriptions,
+                   coalesce(e.mention_texts, []) as mentions,
+                   coalesce(e.source_chunks, []) as sources
+            """
+            
+            async with self._driver.session(database=self.database) as session:
+                entities_result = await session.run(entities_query, {'node_ids': actual_node_ids})
+                entities_records = await entities_result.data()
+                entities = [dict(record) for record in entities_records]
+            
+            clusters[community_id] = entities
+        
+        logger.info(f"  ✅ 检测到 {len(clusters)} 个需要合并的聚类")
+        
+        # 添加调试信息
+        for cluster_id, entities in clusters.items():
+            entity_names = [e.get('name', '') for e in entities]
+            logger.info(f"  🔍 聚类 {cluster_id}: {entity_names}")
+        
+        return clusters
+
+    async def _merge_clusters(self, clusters: dict) -> int:
+        """合并同社区的实体"""
+        if not clusters:
+            logger.info("  ℹ️ 没有需要合并的聚类")
+            return 0
+            
+        logger.info("  🔄 开始合并实体聚类...")
+        
+        total_merged = 0
+        
+        for cluster_id, entities in clusters.items():
+            if len(entities) < 2:
+                continue
+            
+            # 选择信息最丰富的实体作为主实体
+            primary_entity = max(entities, key=lambda e: (
+                len(e.get('descriptions', [])) +
+                len(e.get('mentions', [])) +
+                len(e.get('sources', []))
+            ))
+            
+            other_entities = [e for e in entities if e['node_id'] != primary_entity['node_id']]
+            
+            # 收集所有属性
+            all_descriptions = set(primary_entity.get('descriptions', []))
+            all_mentions = set(primary_entity.get('mentions', []))
+            all_sources = set(primary_entity.get('sources', []))
+            
+            for entity in other_entities:
+                all_descriptions.update(entity.get('descriptions', []))
+                all_mentions.update(entity.get('mentions', []))
+                all_sources.update(entity.get('sources', []))
+            
+            # 执行合并，使用elementId()替代id()，并迁移关系
+            other_node_ids = [entity['node_id'] for entity in other_entities]
+            
+            merge_query = """
+            // 找到主实体和其他实体
+            MATCH (primary:Entity) WHERE elementId(primary) = $primary_id
+            MATCH (other:Entity) WHERE elementId(other) IN $other_ids
+            
+            // 迁移其他实体的所有关系到主实体
+            WITH primary, collect(other) as others
+            UNWIND others as other
+            
+            // 处理出向关系
+            OPTIONAL MATCH (other)-[r]->(target)
+            WHERE NOT target:Entity OR elementId(target) <> elementId(primary)
+            WITH primary, other, collect({rel: r, target: target}) as outRels
+            
+            // 处理入向关系  
+            OPTIONAL MATCH (source)-[r]->(other)
+            WHERE NOT source:Entity OR elementId(source) <> elementId(primary)
+            WITH primary, other, outRels, collect({rel: r, source: source}) as inRels
+            
+            // 创建出向关系
+            UNWIND outRels as outRel
+            WITH primary, other, inRels, outRel
+            WHERE outRel.rel IS NOT NULL
+            CALL apoc.create.relationship(
+                primary, 
+                type(outRel.rel), 
+                properties(outRel.rel), 
+                outRel.target
+            ) YIELD rel as newOutRel
+            
+            // 创建入向关系
+            WITH primary, other, inRels
+            UNWIND inRels as inRel
+            WITH primary, other, inRel
+            WHERE inRel.rel IS NOT NULL
+            CALL apoc.create.relationship(
+                inRel.source, 
+                type(inRel.rel), 
+                properties(inRel.rel), 
+                primary
+            ) YIELD rel as newInRel
+            
+            // 更新主实体属性
+            WITH primary, other
+            SET primary.entity_descriptions = $descriptions,
+                primary.mention_texts = $mentions,
+                primary.source_chunks = $sources,
+                primary.update_time = datetime()
+            
+            // 删除其他实体
+            DETACH DELETE other
+            
+            RETURN 1 as merged_count
+            """
+            
+            # 由于上述查询较复杂，使用简化版本
+            simplified_merge_query = """
+            // 1. 找到主实体和其他实体
+            MATCH (primary:Entity) WHERE elementId(primary) = $primary_id
+            WITH primary
+            MATCH (other:Entity) WHERE elementId(other) IN $other_ids
+            
+            // 2. 迁移其他实体的出向关系
+            OPTIONAL MATCH (other)-[r]->(target)
+            WHERE NOT (primary)-[]->(target) OR NOT target:Entity
+            WITH primary, other, r, target
+            WHERE r IS NOT NULL AND target IS NOT NULL
+            CREATE (primary)-[newR]->(target)
+            SET newR = properties(r)
+            WITH primary, other, count(r) as out_count
+            
+            // 3. 迁移其他实体的入向关系  
+            OPTIONAL MATCH (source)-[r]->(other)
+            WHERE NOT (source)-[]->(primary) OR NOT source:Entity
+            WITH primary, other, out_count, r, source
+            WHERE r IS NOT NULL AND source IS NOT NULL
+            CREATE (source)-[newR]->(primary)
+            SET newR = properties(r)
+            WITH primary, other, out_count, count(r) as in_count
+            
+            // 4. 更新主实体属性并删除其他实体
+            SET primary.entity_descriptions = $descriptions,
+                primary.mention_texts = $mentions,
+                primary.source_chunks = $sources,
+                primary.update_time = datetime()
+            
+            DETACH DELETE other
+            
+            RETURN 1 as merged_count
+            """
+            
+            async with self._driver.session(database=self.database) as session:
+                try:
+                    result = await session.run(merge_query, {
+                        'primary_id': primary_entity['node_id'],
+                        'other_ids': other_node_ids,
+                        'descriptions': list(all_descriptions),
+                        'mentions': list(all_mentions),
+                        'sources': list(all_sources)
+                    })
+                    merge_records = await result.data()
+                    merged_count = len(merge_records)
+                    total_merged += merged_count
+                    
+                    entity_names = [e.get('name', '') for e in entities]
+                    logger.info(f"  🔄 合并聚类 {cluster_id} ({len(entities)}个): {entity_names} -> 合并了 {merged_count} 个实体")
+                    
+                except Exception as e:
+                    logger.error(f"  ❌ 合并聚类 {cluster_id} 失败: {e}")
+                    # 回退到简单合并方式
+                    simple_merge_query = """
+                    // 更新主实体
+                    MATCH (primary:Entity) WHERE elementId(primary) = $primary_id
+                    SET primary.entity_descriptions = $descriptions,
+                        primary.mention_texts = $mentions,
+                        primary.source_chunks = $sources,
+                        primary.update_time = datetime()
+                    
+                    // 删除其他实体
+                    WITH primary
+                    MATCH (other:Entity) WHERE elementId(other) IN $other_ids
+                    DETACH DELETE other
+                    
+                    RETURN size($other_ids) as merged_count
+                    """
+                    
+                    result = await session.run(simple_merge_query, {
+                        'primary_id': primary_entity['node_id'],
+                        'other_ids': other_node_ids,
+                        'descriptions': list(all_descriptions),
+                        'mentions': list(all_mentions),
+                        'sources': list(all_sources)
+                    })
+                    merge_records = await result.data()
+                    merged_count = merge_records[0]['merged_count'] if merge_records else 0
+                    total_merged += merged_count
+                    
+                    entity_names = [e.get('name', '') for e in entities]
+                    logger.info(f"  🔄 简单合并聚类 {cluster_id} ({len(entities)}个): {entity_names} -> 合并了 {merged_count} 个实体")
+        
+        return total_merged
+
+    async def _cleanup_resources(self, graph_name: str):
+        """清理临时资源"""
+        try:
+            # 删除GDS图投影
+            if graph_name:
+                drop_query = f"CALL gds.graph.drop('{graph_name}', false)"
+                async with self._driver.session(database=self.database) as session:
+                    try:
+                        result = await session.run(drop_query)
+                        await result.consume()
+                    except Exception as e:
+                        # 忽略图不存在的错误
+                        if "Graph with name" not in str(e) and "does not exist" not in str(e):
+                            raise e
+            
+            # 删除临时相似度关系
+            cleanup_query = """
+            MATCH ()-[r:SIMILAR]-()
+            DELETE r
+            """
+            
+            async with self._driver.session(database=self.database) as session:
+                result = await session.run(cleanup_query)
+                await result.consume()
+            
+            logger.info(f"  🧹 资源清理完成")
+            
+        except Exception as e:
+            logger.warning(f"  ⚠️ 资源清理失败: {e}")
+
+    async def _fallback_name_based_merge(self):
+        """回退到基础的名称匹配合并方式"""
+        logger.info("  🔄 使用基础名称匹配进行实体合并...")
+        
+        merge_query = """
+        MATCH (e1:Entity), (e2:Entity) 
+        WHERE toLower(e1.entity_name) = toLower(e2.entity_name)
+        AND elementId(e1) > elementId(e2)
+        WITH e1, e2, 
+             coalesce(e1.entity_descriptions, []) + coalesce(e2.entity_descriptions, []) as merged_desc,
+             coalesce(e1.mention_texts, []) + coalesce(e2.mention_texts, []) as merged_mentions,
+             coalesce(e1.source_chunks, []) + coalesce(e2.source_chunks, []) as merged_sources
+        
+        SET e2.entity_descriptions = merged_desc,
+            e2.mention_texts = merged_mentions,
+            e2.source_chunks = merged_sources,
+            e2.update_time = datetime()
+        
+        DETACH DELETE e1
+        
+        RETURN count(e1) as merged_count
+        """
+        
+        async with self._driver.session(database=self.database) as session:
+            result = await session.run(merge_query)
+            records = await result.data()
+        
+        merged_count = records[0]['merged_count'] if records else 0
+        logger.info(f"  ✅ 基础合并完成，合并了 {merged_count} 个重复实体")
 
     async def get_graph_statistics(self) -> Dict[str, int]:
         """获取图统计信息"""
