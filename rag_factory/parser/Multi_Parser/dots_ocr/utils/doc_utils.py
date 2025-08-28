@@ -41,7 +41,7 @@ def fitz_doc_to_image(doc, target_dpi=200, origin_dpi=None) -> dict:
 
 def load_images_from_pdf(pdf_file, dpi=200, start_page_id=0, end_page_id=None) -> list:
     images = []
-    with fitz.open("pdf",pdf_file) as doc:
+    with fitz.open(pdf_file) as doc:
         pdf_page_num = doc.page_count
         end_page_id = (
             end_page_id
