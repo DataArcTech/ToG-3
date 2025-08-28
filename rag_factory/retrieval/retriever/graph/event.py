@@ -266,7 +266,7 @@ class EventGraphRetriever:
             # 实体间关系（双向）
             ("MATCH (a:Entity)-[:ENTITY_RELATION]->(b:Entity) RETURN a.id_ as src, b.id_ as dst", True),
             # 事件间关系（双向）
-            ("MATCH (a:Event)-[:EVENT_RELATION]->(b:Event) RETURN a.id_ as src, b.id_ as dst", True),
+            ("MATCH (a:Event)-[:EVENT_RELATION]->(b:Event) RETURN a.id_ as src, b.id_ as dst", False),
         ]
         
         try:
@@ -439,12 +439,17 @@ class EventGraphRetriever:
             return []
     
     def _deduplicate_seed_nodes(self, seed_nodes: List[SeedNode]) -> List[SeedNode]:
-        """去重种子节点，保留最高分的"""
-        seen_ids = {}
+        """去重种子节点，保留最高分的，并按分数降序排序"""
+        seed_nodes.sort(key=lambda x: x.score, reverse=True)
+        
+        seen_ids = set()
+        deduplicated_nodes = []
         for node in seed_nodes:
-            if node.id_ not in seen_ids or node.score > seen_ids[node.id_].score:
-                seen_ids[node.id_] = node
-        return list(seen_ids.values())
+            if node.id_ not in seen_ids:
+                seen_ids.add(node.id_)
+                deduplicated_nodes.append(node)
+        
+        return deduplicated_nodes
     
     
     async def _step3_personalized_pagerank(self, seed_nodes: List[SeedNode]) -> PPRResult:
@@ -1002,7 +1007,7 @@ class EventGraphRetriever:
             seed_nodes.extend(exact_matches)
             
             # 向量相似度匹配
-            if not seed_nodes and len(self.entity_embeddings) > 0:
+            if len(self.entity_embeddings) > 0:
                 vector_matches = await self._find_vector_entity_matches(entity_name)
                 seed_nodes.extend(vector_matches)
                 
