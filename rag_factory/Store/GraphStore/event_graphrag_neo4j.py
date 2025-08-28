@@ -27,6 +27,53 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
         """
         super().__init__(url, username, password, database, embedding)
     
+    async def _safe_execute_and_consume(self, query: str, parameters: Dict[str, Any] = None):
+        """
+        安全执行查询并确保Result被完全消费
+        
+        Args:
+            query: Cypher查询语句
+            parameters: 查询参数
+            
+        Returns:
+            查询结果数据
+        """
+        result = await self._execute_query(query, parameters)
+        # 使用single()方法获取单个结果，或者使用data()获取所有结果
+        try:
+            # 尝试获取所有数据
+            return await result.data()
+        except Exception:
+            # 如果data()失败，尝试使用single()
+            try:
+                record = await result.single()
+                return [record.data()] if record else []
+            except Exception:
+                # 如果都失败，尝试手动迭代
+                records = []
+                try:
+                    async for record in result:
+                        records.append(record.data())
+                    return records
+                except Exception:
+                    # 最后尝试consume()确保Result被消费
+                    try:
+                        await result.consume()
+                    except:
+                        pass
+                    return []
+    
+    async def _safe_execute_only(self, query: str, parameters: Dict[str, Any] = None):
+        """
+        安全执行查询（不返回数据），确保Result被完全消费
+        
+        Args:
+            query: Cypher查询语句
+            parameters: 查询参数
+        """
+        result = await self._execute_query(query, parameters)
+        await result.consume()
+    
     async def store_graph(self, documents: list[Document]) -> bool:
         return await self.store_hyperrag_graph(documents)
     
@@ -47,14 +94,6 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
                 print("⚠️ 没有文档需要处理")
                 return True
             
-            # 过滤重复文档
-            filtered_documents = await self._filter_duplicate_documents(documents)
-            print(f"📊 过滤重复文档: 原始 {len(documents)} 个，过滤后 {len(filtered_documents)} 个")
-            
-            if not filtered_documents:
-                print("⚠️ 所有文档都已存在，无需重复存储")
-                return True
-            
             # 创建约束和索引
             await self._create_constraints_and_indexes()
 
@@ -65,13 +104,10 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
             all_entity_relations = []
             all_event_relations = []
             
-            for document in filtered_documents:
+            for document in documents:
                 # 生成chunk ID
                 chunk_id = document.metadata.get("chunk_id")
-                if not chunk_id:
-                    chunk_id = self._generate_unique_id("chunk_", document.content)
-                    document.metadata["chunk_id"] = chunk_id
-                
+
                 # 创建chunk
                 chunk = {
                     "id_": chunk_id,
@@ -86,11 +122,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
                 for mention in mentions:
                     # 统一转换为字典格式
                     mention_dict = PydanticUtils.to_dict(mention)
-                    
-                    # 为每个mention生成唯一ID
-                    entity_name = mention_dict.get('entity_name', '')
-                    text = mention_dict.get('text', '')
-                    mention_id = self._generate_unique_id("mention_", f"{entity_name}-{text}")
+                    mention_id = chunk_id + "_" + mention.get("id")
                     
                     # 添加存储所需字段
                     mention_dict.update({
@@ -104,10 +136,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
                 for event in events:
                     # 统一转换为字典格式
                     event_dict = PydanticUtils.to_dict(event)
-                    
-                    # 为每个event生成唯一ID
-                    content = event_dict.get("content", "")
-                    event_id = self._generate_unique_id("event_", content)
+                    event_id = chunk_id + "_" + event.get("id")
                     
                     # 添加存储所需字段
                     event_dict.update({
@@ -120,14 +149,22 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
                 entity_relations = document.metadata.get("entity_relations", [])
                 for relation in entity_relations:
                     relation_dict = PydanticUtils.to_dict(relation)
-                    relation_dict["source_chunk"] = chunk_id
+                    relation_id = chunk_id + "_" + relation.get("id")
+                    relation_dict.update({
+                        "id_": relation_id,
+                        "source_chunk": chunk_id,
+                    })
                     all_entity_relations.append(relation_dict)
                 
                 # 提取事件关系 - 统一转换为字典格式
                 event_relations = document.metadata.get("event_relations", [])
                 for relation in event_relations:
                     relation_dict = PydanticUtils.to_dict(relation)
-                    relation_dict["source_chunk"] = chunk_id
+                    relation_id = chunk_id + "_" + relation.get("id")
+                    relation_dict.update({
+                        "id_": relation_id,
+                        "source_chunk": chunk_id,
+                    })
                     all_event_relations.append(relation_dict)
             
             # 存储数据
@@ -211,8 +248,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
             """
             
             try:
-                result = await self._execute_query(check_query, {"chunk_id": chunk_id})
-                records = await result.data()
+                records = await self._safe_execute_and_consume(check_query, {"chunk_id": chunk_id})
                 
                 if not records:
                     # chunk不存在，添加到过滤后的列表
@@ -256,7 +292,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
         
         for statement in constraints_and_indexes:
             try:
-                await self._execute_query(statement)
+                await self._safe_execute_only(statement)
             except Exception as e:
                 # 如果约束已存在或不支持向量索引，跳过
                 if "already exists" in str(e) or "Unknown procedure" in str(e) or "Unsupported" in str(e):
@@ -277,7 +313,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
             RETURN c
             """
             
-            await self._execute_query(query, {
+            await self._safe_execute_and_consume(query, {
                 "id_": chunk["id_"],
                 "content": chunk["content"],
                 "source": chunk["source"],
@@ -324,7 +360,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
             RETURN e
             """
             
-            await self._execute_query(query, {
+            await self._safe_execute_and_consume(query, {
                 "id_": mention["id_"],
                 "entity_name": entity_name,
                 "entity_type": entity_type,
@@ -350,7 +386,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
             RETURN e
             """
             
-            await self._execute_query(query, {
+            await self._safe_execute_and_consume(query, {
                 "id_": event["id_"],
                 "content": event.get("content", ""),
                 "type": event.get("type", ""),
@@ -380,7 +416,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
             RETURN r
             """
             
-            await self._execute_query(query, {
+            await self._safe_execute_and_consume(query, {
                 "head_entity": head_entity,
                 "tail_entity": tail_entity,
                 "relation_type": relation_type,
@@ -412,7 +448,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
             RETURN head.id_ as head_id, tail.id_ as tail_id
             """
             
-            result = await self._execute_query(query, {
+            await self._safe_execute_and_consume(query, {
                 "head_event_content": head_event_content,
                 "tail_event_content": tail_event_content,
                 "relation_type": relation_type,
@@ -463,7 +499,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
                     MERGE (chunk)-[:CONTAINS]->(event)
                     """
                     
-                    await self._execute_query(query, {
+                    await self._safe_execute_and_consume(query, {
                         "chunk_id": chunk_id,
                         "event_id": event_id
                     })
@@ -493,7 +529,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
                     MERGE (chunk)-[:MENTIONS]->(entity)
                     """
                     
-                    await self._execute_query(query, {
+                    await self._safe_execute_and_consume(query, {
                         "chunk_id": chunk_id,
                         "entity_name": entity_name
                     })
@@ -515,7 +551,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
                 MERGE (entity)-[:PARTICIPATES_IN {role: "participant"}]->(event)
                 """
                 
-                await self._execute_query(query, {
+                await self._safe_execute_and_consume(query, {
                     "participant": participant,
                     "event_id": event_id
                 })
@@ -570,7 +606,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
         try:
             # 1. 检查GDS是否可用
             gds_check_query = "RETURN gds.version() as version"
-            result = await self._execute_query(gds_check_query)
+            await self._safe_execute_and_consume(gds_check_query)
             print("  ✅ Neo4j GDS插件可用")
 
             # 2. 创建事件嵌入向量的图投影
@@ -578,7 +614,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
             CALL gds.graph.drop('event_similarity', false) YIELD graphName
             """
             try:
-                await self._execute_query(projection_query)
+                await self._safe_execute_only(projection_query)
                 print("  📊 清理旧的图投影")
             except:
                 pass  # 忽略不存在的图投影错误
@@ -594,7 +630,7 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
                 }
             )
             """
-            await self._execute_query(create_projection_query)
+            await self._safe_execute_only(create_projection_query)
             print("  📊 创建事件相似度图投影完成")
 
             # 4. 运行KNN算法计算相似事件
@@ -606,11 +642,11 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
                     nodeProperties: ['embedding'],
                     writeRelationshipType: 'SIMILAR_TO',
                     writeProperty: 'similarity_score',
-                    similarityCutoff: 0.9
+                    similarityCutoff: 0.85
                 }
             )
             """
-            await self._execute_query(knn_query)
+            await self._safe_execute_only(knn_query)
             print("  🤖 KNN算法执行完成，创建相似事件关系")
 
             # 5. 处理已存在的事件关系，将相似度信息合并到现有关系中
@@ -622,14 +658,14 @@ class HyperRAGNeo4jStore(GraphStoreBaseNeo4j):
                 r.update_time = datetime()
             DELETE s
             """
-            await self._execute_query(merge_similarity_query)
+            await self._safe_execute_only(merge_similarity_query)
             print("  🔄 将相似度信息合并到现有事件关系中")
 
             # 6. 清理图投影
             cleanup_query = """
             CALL gds.graph.drop('event_similarity', false)
             """
-            await self._execute_query(cleanup_query)
+            await self._safe_execute_only(cleanup_query)
             print("  🧹 清理图投影完成")
 
         except Exception as e:

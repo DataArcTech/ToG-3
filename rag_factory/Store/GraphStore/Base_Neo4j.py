@@ -117,15 +117,17 @@ class GraphStoreBaseNeo4j(ABC):
         # 为文档生成chunk ID
         chunk_ids = []
         doc_to_chunk_id = {}
-        
+
+        # 如果文档中没有chunk_id，则生成chunk_id
         for doc in documents:
-            # 根据内容生成唯一的chunk ID
-            chunk_content = doc.content.strip()
-            chunk_id = self._generate_unique_id("chunk_", chunk_content)
-            chunk_ids.append(chunk_id)
+            if "chunk_id" not in doc.metadata:
+                chunk_content = doc.content.strip()
+                chunk_id = self._generate_unique_id("chunk_", chunk_content)
+                doc.metadata["chunk_id"] = chunk_id
+                chunk_ids.append(chunk_id)
+            else:
+                chunk_id = doc.metadata["chunk_id"]
             doc_to_chunk_id[chunk_id] = doc
-            # 将chunk_id保存到文档metadata中
-            doc.metadata["chunk_id"] = chunk_id
         
         # 查询Neo4j中已存在的chunk ID
         existing_chunks = set()
@@ -151,6 +153,7 @@ class GraphStoreBaseNeo4j(ABC):
         print(f"  ✅ 发现 {len(new_documents)} 个新chunk，已跳过 {len(existing_chunks)} 个重复chunk")
         return new_documents
 
+# TODO 分批处理，有bug，不能自动对所有节点生成嵌入向量，而是生成一部分，然后就停止了
     async def _generate_embeddings(self):
         """自动为没有embedding的节点生成嵌入向量"""
         if not self.embedding:
@@ -159,107 +162,222 @@ class GraphStoreBaseNeo4j(ABC):
             
         print("🧠 正在自动生成缺失的嵌入向量...")
         
-        # 为chunk生成嵌入
-        chunk_query = """
-        MATCH (c:Chunk)
-        WHERE c.embedding IS NULL
-        RETURN c.id_ as id_, c.content as content
-        LIMIT 100
-        """
+        # 先获取总数用于进度显示
+        async def get_total_count(node_type, condition="embedding IS NULL"):
+            count_query = f"MATCH (n:{node_type}) WHERE n.{condition} RETURN count(n) as total"
+            async with self._driver.session(database=self.database) as session:
+                result = await session.run(count_query)
+                record = await result.single()
+                return record["total"] if record else 0
         
-        async with self._driver.session(database=self.database) as session:
-            result = await session.run(chunk_query)
-            chunks_to_embed = []
-            chunk_texts = []
+        # 处理Chunks
+        total_chunks = await get_total_count("Chunk")
+        if total_chunks > 0:
+            print(f"  📊 发现 {total_chunks} 个chunk需要生成嵌入向量")
+            await self._process_chunk_embeddings(total_chunks)
+        else:
+            print("  ✅ 所有chunk已有嵌入向量")
+        
+        # 处理Entities  
+        total_entities = await get_total_count("Entity")
+        if total_entities > 0:
+            print(f"  📊 发现 {total_entities} 个实体需要生成嵌入向量")
+            await self._process_entity_embeddings(total_entities)
+        else:
+            print("  ✅ 所有实体已有嵌入向量")
+        
+        # 处理Events
+        total_events = await get_total_count("Event")
+        if total_events > 0:
+            print(f"  📊 发现 {total_events} 个事件需要生成嵌入向量")
+            await self._process_event_embeddings(total_events)
+        else:
+            print("  ✅ 所有事件已有嵌入向量")
+
+    async def _process_chunk_embeddings(self, total_count):
+        """处理chunk嵌入向量生成"""
+        batch_size = 100
+        processed = 0
+        
+        while processed < total_count:
+            # 每次重新查询确保获取最新的未处理数据
+            query = """
+            MATCH (c:Chunk)
+            WHERE c.embedding IS NULL
+            RETURN c.id_ as id_, c.content as content
+            LIMIT $limit
+            """
             
-            async for record in result:
-                chunk_id = record["id_"]
-                content = record["content"] or ""
+            async with self._driver.session(database=self.database) as session:
+                result = await session.run(query, {"limit": batch_size})
+                records = await result.data()  # 使用data()方法获取所有记录
                 
-                chunk_texts.append(content)
-                chunks_to_embed.append(chunk_id)
-            
-            if chunk_texts:
-                print(f"  🧠 为 {len(chunk_texts)} 个chunk生成嵌入向量...")
-                embeddings = self.embedding.embed_documents(chunk_texts)
+                if not records:
+                    break  # 没有更多需要处理的数据
                 
-                for chunk_id, embedding in zip(chunks_to_embed, embeddings):
+                chunks_to_embed = []
+                chunk_texts = []
+                
+                for record in records:
+                    chunk_id = record["id_"]
+                    content = record["content"] or ""
+                    
+                    if content.strip():  # 跳过空内容
+                        chunk_texts.append(content)
+                        chunks_to_embed.append(chunk_id)
+                
+                if chunks_to_embed:
+                    print(f"    🧠 处理chunk {processed + 1}-{processed + len(chunks_to_embed)}/{total_count}")
+                    embeddings = self.embedding.embed_documents(chunk_texts)
+                    
+                    # 批量更新
                     update_query = """
-                    MATCH (c:Chunk {id_: $id_})
-                    SET c.embedding = $embedding
+                    UNWIND $updates as update
+                    MATCH (c:Chunk {id_: update.id_})
+                    SET c.embedding = update.embedding
                     """
-                    await self._execute_query(update_query, {"id_": chunk_id, "embedding": embedding})
-                
-                print(f"  ✅ 完成 {len(embeddings)} 个chunk嵌入向量生成")
+                    
+                    updates = [
+                        {"id_": chunk_id, "embedding": embedding}
+                        for chunk_id, embedding in zip(chunks_to_embed, embeddings)
+                    ]
+                    
+                    await self._execute_query(update_query, {"updates": updates})
+                    processed += len(chunks_to_embed)
+                else:
+                    # 如果这批记录都是空内容，标记为已处理以避免无限循环
+                    empty_updates = []
+                    for record in records:
+                        chunk_id = record["id_"]
+                        content = record["content"] or ""
+                        if not content.strip():
+                            empty_updates.append(chunk_id)
+                    
+                    if empty_updates:
+                        # 为空内容的chunk设置空的embedding或标记
+                        empty_query = """
+                        UNWIND $ids as id_
+                        MATCH (c:Chunk {id_: id_})
+                        SET c.embedding = []
+                        """
+                        await self._execute_query(empty_query, {"ids": empty_updates})
+                        processed += len(empty_updates)
+
+    async def _process_entity_embeddings(self, total_count):
+        """处理实体嵌入向量生成"""
+        batch_size = 100
+        processed = 0
         
-        # 为实体生成嵌入
-        entity_query = """
-        MATCH (e:Entity)
-        WHERE e.embedding IS NULL
-        RETURN e.id_ as id_, e.entity_name as name, e.entity_descriptions as descriptions
-        LIMIT 100
-        """
-        
-        async with self._driver.session(database=self.database) as session:
-            result = await session.run(entity_query)
-            entities_to_embed = []
-            entity_texts = []
+        while processed < total_count:
+            query = """
+            MATCH (e:Entity)
+            WHERE e.embedding IS NULL
+            RETURN e.id_ as id_, e.entity_name as name, e.entity_descriptions as descriptions
+            LIMIT $limit
+            """
             
-            async for record in result:
-                entity_id = record["id_"]
-                entity_name = record["name"]
-                descriptions = record["descriptions"] or []
+            async with self._driver.session(database=self.database) as session:
+                result = await session.run(query, {"limit": batch_size})
+                records = await result.data()
                 
-                # 构建用于嵌入的文本
-                text = f"{entity_name}: {' '.join(descriptions)}"
-                entity_texts.append(text)
-                entities_to_embed.append(entity_id)
-            
-            if entity_texts:
-                print(f"  🧠 为 {len(entity_texts)} 个实体生成嵌入向量...")
-                embeddings = self.embedding.embed_documents(entity_texts)
+                if not records:
+                    break
                 
-                for entity_id, embedding in zip(entities_to_embed, embeddings):
+                entities_to_embed = []
+                entity_texts = []
+                
+                for record in records:
+                    entity_id = record["id_"]
+                    entity_name = record["name"] or ""
+                    descriptions = record["descriptions"] or []
+                    
+                    text = f"{entity_name}: {' '.join(descriptions)}"
+                    entity_texts.append(text)
+                    entities_to_embed.append(entity_id)
+                
+                if entities_to_embed:
+                    print(f"    🧠 处理实体 {processed + 1}-{processed + len(entities_to_embed)}/{total_count}")
+                    embeddings = self.embedding.embed_documents(entity_texts)
+                    
                     update_query = """
-                    MATCH (e:Entity {id_: $id_})
-                    SET e.embedding = $embedding
+                    UNWIND $updates as update
+                    MATCH (e:Entity {id_: update.id_})
+                    SET e.embedding = update.embedding
                     """
-                    await self._execute_query(update_query, {"id_": entity_id, "embedding": embedding})
-                
-                print(f"  ✅ 完成 {len(embeddings)} 个实体嵌入向量生成")
+                    
+                    updates = [
+                        {"id_": entity_id, "embedding": embedding}
+                        for entity_id, embedding in zip(entities_to_embed, embeddings)
+                    ]
+                    
+                    await self._execute_query(update_query, {"updates": updates})
+                    processed += len(entities_to_embed)
+
+    async def _process_event_embeddings(self, total_count):
+        """处理事件嵌入向量生成"""
+        batch_size = 100
+        processed = 0
         
-        # 为事件生成嵌入
-        event_query = """
-        MATCH (e:Event)
-        WHERE e.embedding IS NULL
-        RETURN e.id_ as id_, e.content as content
-        LIMIT 100
-        """
-        
-        async with self._driver.session(database=self.database) as session:
-            result = await session.run(event_query)
-            events_to_embed = []
-            event_texts = []
+        while processed < total_count:
+            query = """
+            MATCH (e:Event)
+            WHERE e.embedding IS NULL
+            RETURN e.id_ as id_, e.content as content
+            LIMIT $limit
+            """
             
-            async for record in result:
-                event_id = record["id_"]
-                content = record["content"] or ""
+            async with self._driver.session(database=self.database) as session:
+                result = await session.run(query, {"limit": batch_size})
+                records = await result.data()
                 
-                event_texts.append(content)
-                events_to_embed.append(event_id)
-            
-            if event_texts:
-                print(f"  🧠 为 {len(event_texts)} 个事件生成嵌入向量...")
-                embeddings = self.embedding.embed_documents(event_texts)
+                if not records:
+                    break
                 
-                for event_id, embedding in zip(events_to_embed, embeddings):
+                events_to_embed = []
+                event_texts = []
+                
+                for record in records:
+                    event_id = record["id_"]
+                    content = record["content"] or ""
+                    
+                    if content.strip():  # 跳过空内容
+                        event_texts.append(content)
+                        events_to_embed.append(event_id)
+                
+                if events_to_embed:
+                    print(f"    🧠 处理事件 {processed + 1}-{processed + len(events_to_embed)}/{total_count}")
+                    embeddings = self.embedding.embed_documents(event_texts)
+                    
                     update_query = """
-                    MATCH (e:Event {id_: $id_})
-                    SET e.embedding = $embedding
+                    UNWIND $updates as update
+                    MATCH (e:Event {id_: update.id_})
+                    SET e.embedding = update.embedding
                     """
-                    await self._execute_query(update_query, {"id_": event_id, "embedding": embedding})
-                
-                print(f"  ✅ 完成 {len(embeddings)} 个事件嵌入向量生成")
+                    
+                    updates = [
+                        {"id_": event_id, "embedding": embedding}
+                        for event_id, embedding in zip(events_to_embed, embeddings)
+                    ]
+                    
+                    await self._execute_query(update_query, {"updates": updates})
+                    processed += len(events_to_embed)
+                else:
+                    # 处理空内容的事件
+                    empty_updates = []
+                    for record in records:
+                        event_id = record["id_"]
+                        content = record["content"] or ""
+                        if not content.strip():
+                            empty_updates.append(event_id)
+                    
+                    if empty_updates:
+                        empty_query = """
+                        UNWIND $ids as id_
+                        MATCH (e:Event {id_: id_})
+                        SET e.embedding = []
+                        """
+                        await self._execute_query(empty_query, {"ids": empty_updates})
+                        processed += len(empty_updates)
 
     async def _merge_duplicate_entities(self):
         """使用APOC合并可能重复的实体节点（可选功能）"""
