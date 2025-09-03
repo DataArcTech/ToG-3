@@ -1,0 +1,58 @@
+llm:
+  name: openai
+  base_url: "https://api.gptsapi.net/v1"
+  api_key: "sk-2T06b7c7f9c3870049fbf8fada596b0f8ef908d1e233KLY2"
+  model_name: "gpt-4.1-mini"
+# llm:
+#   name: openai
+#   base_url: "https://api.gptsapi.net/v1"
+#   api_key: "sk-1Bqa6698722a00d8c003a81b26a42c2be20243cdd9fTGzQT"
+#   model_name: "gpt-4o-mini"
+# llm:
+#   name: openai
+#   base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+#   api_key: "sk-e696b88412204f6f8b747afe92c6e45a"
+#   model_name: "qwen-plus"
+
+embedding:
+  name: huggingface
+  model_name: "/finance_ML/dataarc_syn_database/model/Qwen/qwen_embedding_0.6B"
+  model_kwargs:
+    device: "cuda:6"
+  encode_kwargs:
+    batch_size: 8
+
+
+
+# store:
+#   name: faiss
+#   folder_path: /data/FinAi_Mapping_Knowledge/chenmingzhen/test_faiss_store
+
+store:
+  name: faiss
+  folder_path: /data/FinAi_Mapping_Knowledge/liuyingqi/test_faiss_store1
+
+
+# bm25:
+#   name: bm25
+#   k: 10
+#   data_path: /data/FinAi_Mapping_Knowledge/chenmingzhen/tog3_backend/TCL/syn_table_data/data_all_clearn_short_chunk_with_caption_desc.json
+
+bm25:
+  name: bm25
+  k: 10
+  data_path: /data/FinAi_Mapping_Knowledge/liuyingqi/2026国考公务员行测-资料部分.json
+
+retriever:
+  name: vectorstore
+
+reranker:
+  name: qwen3
+  model_name_or_path: "/finance_ML/dataarc_syn_database/model/Qwen/qwen_reranker_0.6B"
+  device_id: "cuda:6"
+
+dataset:
+  name: TCL
+  
+rewrite:
+  path: /data/FinAi_Mapping_Knowledge/liuyingqi/result/rewrite_query.json
