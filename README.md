@@ -4,7 +4,7 @@
   <img src="./assets/logo.png" width="120" height="120" alt="RAG-Factory Logo" style="border-radius: 20px; box-shadow: 0 8px 32px rgba(0, 217, 255, 0.3);">
 </div>
 
-# 🚀 RAG-Factory: Advanced and Easy-Use RAG Pipelines
+# 🚀 Think-on-Graph 3.0: Efficient and Adaptive LLM Reasoning on Heterogeneous Graphs via Multi-Agent Dual-Evolving Context Retrieval
 </div>
 
 <div align="center" style="line-height: 1;">
